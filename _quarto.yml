@@ -1,0 +1,21 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Demografisk försörjningskvot"
+  description: "Interaktiv app för demografisk försörjningskvot i Sveriges kommuner"
+  favicon: ""
+  navbar:
+    background: "#0076bc"
+    foreground: "white"
+    title: "Demografisk försörjningskvot – Sveriges kommuner"
+
+format:
+  html:
+    theme: flatly
+    css: styles.css
+    toc: false
+
+execute:
+  freeze: false

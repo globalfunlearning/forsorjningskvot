@@ -1,0 +1,472 @@
+---
+title: "Demografisk försörjningskvot – Sveriges kommuner"
+format:
+  html:
+    page-layout: full
+    theme: flatly
+    css: styles.css
+    resources:
+      - demografisk_försörjningskvot.xlsx
+filters:
+  - shinylive
+---
+
+```{shinylive-r}
+#| standalone: true
+#| viewerHeight: 700
+
+# =============================================================================
+# PAKET
+# =============================================================================
+
+library(shiny)
+library(bslib)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(httr2)
+library(jsonlite)
+
+# =============================================================================
+# FÄRGER
+# =============================================================================
+
+FARG_GRA     <- "#cccccc"
+FARG_ROSA    <- "#e8457a"
+FARG_GUL     <- "#f0a800"
+FARG_BLA     <- "#0076bc"
+FARG_MRK     <- "#1a3a5c"
+TEXT_FARG    <- "#1a1a1a"
+AXEL_FARG    <- "#666666"
+GRID_FARG    <- "#e0e0e0"
+
+# =============================================================================
+# HJÄLPFUNKTION: HÄMTA FRÅN SCB API
+# Mått: "totalt" | "barn" | "aldre"
+# =============================================================================
+
+hamta_scb <- function(matt = "totalt") {
+
+  # SCB tabell: Demografisk försörjningskvot efter region och kön, 2000–
+  # Tabell: BE0101N1 – Befolkning efter region, åldersgrupp och kön
+  # Vi beräknar kvoten från befolkningsdata per åldersgrupp
+
+  bas_url <- "https://api.scb.se/OV0104/v1/doris/sv/ssd/START/BE/BE0101/BE0101A/BefolkningNy"
+
+  # Åldersgrupper för kvotberäkning
+  if (matt == "totalt") {
+    aldrar_taljare  <- c("0-4", "5-9", "10-14", "15-19",
+                         "65-69", "70-74", "75-79", "80-84", "85-89", "90+")
+    aldrar_namnare  <- c("20-24", "25-29", "30-34", "35-39",
+                         "40-44", "45-49", "50-54", "55-59", "60-64")
+  } else if (matt == "barn") {
+    aldrar_taljare  <- c("0-4", "5-9", "10-14", "15-19")
+    aldrar_namnare  <- c("20-24", "25-29", "30-34", "35-39",
+                         "40-44", "45-49", "50-54", "55-59", "60-64")
+  } else {
+    aldrar_taljare  <- c("65-69", "70-74", "75-79", "80-84", "85-89", "90+")
+    aldrar_namnare  <- c("20-24", "25-29", "30-34", "35-39",
+                         "40-44", "45-49", "50-54", "55-59", "60-64")
+  }
+
+  # Bygg fråga
+  query <- list(
+    query = list(
+      list(code = "Region",     selection = list(filter = "vs:RegionKommun07", values = list("*"))),
+      list(code = "Alder",      selection = list(filter = "agg:Ålder10år", values = c(aldrar_taljare, aldrar_namnare))),
+      list(code = "Kon",        selection = list(filter = "item", values = list("1+2"))),
+      list(code = "ContentsCode", selection = list(filter = "item", values = list("BE0101N1"))),
+      list(code = "Tid",        selection = list(filter = "item", values = as.list(as.character(2000:2025))))
+    ),
+    response = list(format = "json")
+  )
+
+  tryCatch({
+    resp <- request(bas_url) |>
+      req_body_json(query) |>
+      req_perform()
+
+    data_raw <- resp |> resp_body_json()
+
+    # Parsa resultat
+    df <- map_dfr(data_raw$data, function(x) {
+      tibble(
+        region = x$key[[1]],
+        alder  = x$key[[2]],
+        ar     = as.integer(x$key[[4]]),
+        antal  = as.numeric(x$values[[1]])
+      )
+    })
+
+    # Beräkna kvot per region och år
+    df_kvot <- df |>
+      mutate(grupp = if_else(alder %in% aldrar_taljare, "taljare", "namnare")) |>
+      group_by(region, ar, grupp) |>
+      summarise(summa = sum(antal, na.rm = TRUE), .groups = "drop") |>
+      pivot_wider(names_from = grupp, values_from = summa) |>
+      mutate(kvotvarde = round(taljare / namnare * 100, 1)) |>
+      select(region, ar, kvotvarde)
+
+    return(df_kvot)
+
+  }, error = function(e) {
+    message("SCB API-fel: ", e$message)
+    return(NULL)
+  })
+}
+
+# =============================================================================
+# LÄSA LOKAL EXCELFIL (backup / historik)
+# =============================================================================
+
+lasa_excel <- function() {
+  tryCatch({
+    raw <- read_excel("demografisk_försörjningskvot.xlsx",
+                      sheet = 1, col_names = FALSE, skip = 2)
+    ar_vec <- as.numeric(raw[1, 2:ncol(raw)])
+    kommundata <- raw[-1, ]
+    colnames(kommundata) <- c("kommun", as.character(ar_vec))
+    df <- kommundata |>
+      filter(!is.na(kommun)) |>
+      mutate(across(-kommun, as.numeric)) |>
+      filter(!is.na(`2000`)) |>
+      pivot_longer(-kommun, names_to = "ar", values_to = "kvotvarde") |>
+      mutate(ar = as.integer(ar))
+    return(df)
+  }, error = function(e) {
+    return(NULL)
+  })
+}
+
+# =============================================================================
+# GÖTEBORGSREGIONENS KOMMUNER (GR)
+# =============================================================================
+
+GR_KOMMUNER <- c(
+  "1480 Göteborg", "1481 Mölndal", "1482 Kungälv",
+  "1484 Lysekil", "1485 Uddevalla", "1487 Vänersborg",
+  "1488 Trollhättan", "1489 Alingsås", "1490 Borås",
+  "1402 Partille", "1407 Öckerö", "1415 Stenungsund",
+  "1419 Tjörn", "1421 Orust", "1438 Dals-Ed",
+  "1440 Ale", "1441 Lerum", "1443 Bollebygd",
+  "0114 Upplands Väsby"  # placeholder – ersätt med faktiska GR-kommuner
+)
+
+# Riktiga GR-kommuner (Göteborgsregionen)
+GR_KOMMUNER <- c(
+  "1480 Göteborg", "1481 Mölndal", "1482 Kungälv",
+  "1402 Partille", "1407 Öckerö", "1415 Stenungsund",
+  "1419 Tjörn", "1421 Orust", "1440 Ale",
+  "1441 Lerum", "1443 Bollebygd", "1444 Grästorp",
+  "1462 Lilla Edet", "1463 Mark", "1465 Svenljunga",
+  "1466 Herrljunga", "1489 Alingsås", "1490 Borås"
+)
+
+# =============================================================================
+# UI
+# =============================================================================
+
+ui <- page_sidebar(
+  title = "Demografisk försörjningskvot",
+  theme = bs_theme(
+    base_font  = font_google("Source Sans Pro"),
+    bg         = "#ffffff",
+    fg         = "#1a1a1a",
+    primary    = "#0076bc"
+  ),
+
+  sidebar = sidebar(
+    width = 280,
+
+    # --- Måttval ---
+    radioButtons(
+      "matt", "Visa försörjningskvot för:",
+      choices  = c("Totalt" = "totalt",
+                   "Barn (0–19 år)" = "barn",
+                   "Äldre (65+ år)" = "aldre"),
+      selected = "totalt"
+    ),
+
+    hr(),
+
+    # --- Kommunval ---
+    tags$label("Markera kommuner:", style = "font-weight:600; font-size:13px;"),
+
+    selectInput(
+      "kommun1", NULL,
+      choices  = character(0),
+      selected = NULL
+    ),
+    tags$small(style = paste0("color:", FARG_ROSA, "; font-weight:bold;"),
+               "● Rosa linje"),
+
+    br(), br(),
+
+    selectInput(
+      "kommun2", NULL,
+      choices  = character(0),
+      selected = NULL
+    ),
+    tags$small(style = paste0("color:", FARG_GUL, "; font-weight:bold;"),
+               "● Gul linje"),
+
+    hr(),
+
+    # --- Referenslinjer ---
+    tags$label("Visa referenslinjer:", style = "font-weight:600; font-size:13px;"),
+
+    checkboxInput("visa_gr",      "Göteborgsregionen (medel)", FALSE),
+    checkboxInput("visa_sverige", "Sverige totalt",            FALSE),
+
+    hr(),
+
+    # --- Datakälla ---
+    radioButtons(
+      "kallval", "Datakälla:",
+      choices  = c("Lokal fil (snabb)" = "lokal",
+                   "SCB API (aktuell)" = "api"),
+      selected = "lokal"
+    ),
+
+    actionButton("uppdatera", "Hämta data", class = "btn-primary btn-sm w-100"),
+
+    hr(),
+
+    tags$small(style = "color:#888; font-size:11px; line-height:1.4;",
+      "Försörjningskvoten visar antal utanför arbetsför ålder (0–19 + 65+)
+       per 100 personer i arbetsför ålder (20–64 år).
+       Källa: SCB Statistikdatabasen."
+    )
+  ),
+
+  # --- Huvudpanel ---
+  card(
+    card_header("Försörjningskvot 2000–2025 – Sveriges kommuner"),
+    plotOutput("plot", height = "480px")
+  ),
+
+  card(
+    card_header("Topp/botten 5 senaste år"),
+    tableOutput("tabell")
+  )
+)
+
+# =============================================================================
+# SERVER
+# =============================================================================
+
+server <- function(input, output, session) {
+
+  # --- Reaktiv data ---
+  data_r <- reactiveVal(NULL)
+
+  # Ladda vid start med lokal fil
+  observe({
+    df <- lasa_excel()
+    if (!is.null(df)) {
+      data_r(df)
+      kommuner <- sort(unique(df$kommun))
+      updateSelectInput(session, "kommun1",
+        choices  = kommuner,
+        selected = kommuner[grep("1480 Göteborg", kommuner)[1]])
+      updateSelectInput(session, "kommun2",
+        choices  = kommuner,
+        selected = kommuner[grep("0180 Stockholm", kommuner)[1]])
+    }
+  })
+
+  # Uppdatera via knapp
+  observeEvent(input$uppdatera, {
+    if (input$kallval == "api") {
+      showNotification("Hämtar från SCB API...", type = "message", duration = 3)
+      df <- hamta_scb(input$matt)
+      if (!is.null(df)) {
+        # Döp om region till kommun för konsistens
+        df <- rename(df, kommun = region)
+        data_r(df)
+        showNotification("Data uppdaterad från SCB!", type = "message", duration = 3)
+      } else {
+        showNotification("SCB API misslyckades – använder lokal fil.", type = "warning")
+        df <- lasa_excel()
+        if (!is.null(df)) data_r(df)
+      }
+    } else {
+      df <- lasa_excel()
+      if (!is.null(df)) {
+        data_r(df)
+        showNotification("Lokal data laddad.", type = "message", duration = 2)
+      }
+    }
+  })
+
+  # --- DIAGRAM ---
+  output$plot <- renderPlot({
+
+    df <- data_r()
+    req(df, input$kommun1, input$kommun2)
+
+    k1 <- input$kommun1
+    k2 <- input$kommun2
+
+    namn_k1 <- sub("^\\d{4} ", "", k1)
+    namn_k2 <- sub("^\\d{4} ", "", k2)
+
+    df_bak <- df |> filter(!kommun %in% c(k1, k2))
+    df_k1  <- df |> filter(kommun == k1)
+    df_k2  <- df |> filter(kommun == k2)
+
+    # GR-medel
+    df_gr <- NULL
+    if (input$visa_gr) {
+      gr_match <- GR_KOMMUNER[GR_KOMMUNER %in% unique(df$kommun)]
+      if (length(gr_match) > 0) {
+        df_gr <- df |>
+          filter(kommun %in% gr_match) |>
+          group_by(ar) |>
+          summarise(kvotvarde = mean(kvotvarde, na.rm = TRUE), .groups = "drop")
+      }
+    }
+
+    # Sverige-medel (approximation som viktat medel av alla kommuner)
+    df_sve <- NULL
+    if (input$visa_sverige) {
+      df_sve <- df |>
+        group_by(ar) |>
+        summarise(kvotvarde = mean(kvotvarde, na.rm = TRUE), .groups = "drop")
+    }
+
+    # Senaste värden för etiketter
+    senaste_ar <- max(df_k1$ar, na.rm = TRUE)
+    val_k1 <- df_k1 |> filter(ar == senaste_ar) |> pull(kvotvarde)
+    val_k2 <- df_k2 |> filter(ar == senaste_ar) |> pull(kvotvarde)
+
+    titlar <- c(totalt = "Demografisk försörjningskvot totalt (0–19 + 65+) per 100 i ålder 20–64",
+                barn   = "Barnförsörjningskvot (0–19 år) per 100 i ålder 20–64",
+                aldre  = "Äldreförsörjningskvot (65+ år) per 100 i ålder 20–64")
+
+    p <- ggplot() +
+
+      # Grå bakgrundslinjer
+      geom_line(
+        data      = df_bak,
+        aes(x = ar, y = kvotvarde, group = kommun),
+        color     = FARG_GRA,
+        linewidth = 0.25,
+        alpha     = 0.6
+      ) +
+
+      # GR-medel
+      {if (!is.null(df_gr))
+        geom_line(data = df_gr, aes(x = ar, y = kvotvarde),
+                  color = FARG_BLA, linewidth = 1.2, linetype = "dashed")
+      } +
+
+      # Sverige-medel
+      {if (!is.null(df_sve))
+        geom_line(data = df_sve, aes(x = ar, y = kvotvarde),
+                  color = FARG_MRK, linewidth = 1.2, linetype = "dotted")
+      } +
+
+      # Kommun 2 (gul)
+      geom_line(data = df_k2, aes(x = ar, y = kvotvarde),
+                color = FARG_GUL, linewidth = 1.8) +
+      geom_point(data = df_k2, aes(x = ar, y = kvotvarde),
+                 fill = FARG_GUL, color = "white",
+                 shape = 21, size = 2.5, stroke = 1.0) +
+
+      # Kommun 1 (rosa)
+      geom_line(data = df_k1, aes(x = ar, y = kvotvarde),
+                color = FARG_ROSA, linewidth = 1.8) +
+      geom_point(data = df_k1, aes(x = ar, y = kvotvarde),
+                 fill = FARG_ROSA, color = "white",
+                 shape = 21, size = 2.5, stroke = 1.0) +
+
+      # Etiketter
+      annotate("text", x = senaste_ar + 0.4, y = val_k1,
+               label = namn_k1, color = FARG_ROSA,
+               hjust = 0, size = 3.8, fontface = "bold") +
+      annotate("text", x = senaste_ar + 0.4, y = val_k2,
+               label = namn_k2, color = FARG_GUL,
+               hjust = 0, size = 3.8, fontface = "bold") +
+
+      # GR/Sverige-etiketter
+      {if (!is.null(df_gr)) {
+        val_gr <- df_gr |> filter(ar == senaste_ar) |> pull(kvotvarde)
+        annotate("text", x = senaste_ar + 0.4, y = val_gr,
+                 label = "GR-medel", color = FARG_BLA,
+                 hjust = 0, size = 3.5, fontface = "bold")
+      }} +
+      {if (!is.null(df_sve)) {
+        val_sve <- df_sve |> filter(ar == senaste_ar) |> pull(kvotvarde)
+        annotate("text", x = senaste_ar + 0.4, y = val_sve,
+                 label = "Sverige", color = FARG_MRK,
+                 hjust = 0, size = 3.5, fontface = "bold")
+      }} +
+
+      scale_x_continuous(
+        breaks = seq(2000, 2025, by = 5),
+        limits = c(1999.5, 2029),
+        expand = c(0, 0)
+      ) +
+      scale_y_continuous(
+        breaks = seq(30, 120, by = 10),
+        labels = scales::number_format(accuracy = 1)
+      ) +
+
+      labs(
+        title    = titlar[input$matt],
+        subtitle = "Grå linjer = alla kommuner  |  Streckad = GR-medel  |  Prickad = Sverige",
+        x = NULL, y = "Kvot",
+        caption = "Källa: SCB Statistikdatabasen"
+      ) +
+
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title         = element_text(size = 13, face = "bold", margin = margin(b = 4)),
+        plot.subtitle      = element_text(size = 9, color = AXEL_FARG, margin = margin(b = 8)),
+        plot.caption       = element_text(size = 8, color = AXEL_FARG, hjust = 0),
+        axis.title.y       = element_text(size = 10, color = AXEL_FARG),
+        axis.text          = element_text(size = 11, color = AXEL_FARG),
+        axis.ticks         = element_blank(),
+        panel.grid.major.y = element_line(color = GRID_FARG, linewidth = 0.4),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor   = element_blank(),
+        panel.background   = element_rect(fill = "white", color = NA),
+        plot.background    = element_rect(fill = "white", color = NA),
+        plot.margin        = margin(t = 8, r = 90, b = 8, l = 8)
+      )
+
+    print(p)
+  })
+
+  # --- TABELL: Topp/botten 5 ---
+  output$tabell <- renderTable({
+
+    df <- data_r()
+    req(df)
+
+    senaste <- max(df$ar, na.rm = TRUE)
+
+    df_senaste <- df |>
+      filter(ar == senaste) |>
+      arrange(desc(kvotvarde)) |>
+      mutate(rank = row_number(),
+             namn = sub("^\\d{4} ", "", kommun))
+
+    topp5   <- df_senaste |> slice_head(n = 5) |>
+      select(Kommun = namn, Kvot = kvotvarde) |>
+      mutate(Grupp = "Högst kvot ↑")
+
+    botten5 <- df_senaste |> slice_tail(n = 5) |>
+      select(Kommun = namn, Kvot = kvotvarde) |>
+      mutate(Grupp = "Lägst kvot ↓")
+
+    bind_rows(topp5, botten5) |>
+      select(Grupp, Kommun, Kvot)
+
+  }, striped = TRUE, hover = TRUE, bordered = FALSE, digits = 1)
+
+}
+
+shinyApp(ui, server)
+```
