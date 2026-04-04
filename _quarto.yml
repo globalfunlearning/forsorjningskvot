@@ -5,7 +5,6 @@ project:
 website:
   title: "Demografisk försörjningskvot"
   description: "Interaktiv app för demografisk försörjningskvot i Sveriges kommuner"
-  favicon: ""
   navbar:
     background: "#0076bc"
     foreground: "white"
@@ -19,3 +18,4 @@ format:
 
 execute:
   freeze: false
+  engine: knitr

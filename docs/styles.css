@@ -1,0 +1,47 @@
+/* Göteborgs Stad – enkel stilmall för försörjningskvot-app */
+
+body {
+  font-family: 'Source Sans Pro', sans-serif;
+}
+
+.navbar, .navbar-default {
+  background-color: #0076bc !important;
+  border: none;
+}
+
+h1.title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1a3a5c;
+}
+
+.card-header {
+  background-color: #f0f4f8;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1a3a5c;
+  border-bottom: 2px solid #0076bc;
+}
+
+.sidebar {
+  font-size: 0.88rem;
+}
+
+.form-label, label {
+  font-size: 0.85rem;
+}
+
+table.table {
+  font-size: 0.85rem;
+}
+
+table.table th {
+  background-color: #e8f4fb;
+  color: #1a3a5c;
+  font-weight: 600;
+}
+
+hr {
+  border-color: #e0e0e0;
+  margin: 0.75rem 0;
+}
