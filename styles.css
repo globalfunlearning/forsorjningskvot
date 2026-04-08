@@ -372,9 +372,7 @@ body {
 
 @media (max-width: 768px) {
   /* Stapla sidebar ovanför innehåll på mobil */
-  .app-wrapper {
-    flex-direction: column;
-  }
+  .app-wrapper { flex-direction: column; }
 
   .sidebar {
     width: 100%;
@@ -388,19 +386,15 @@ body {
   }
 
   /* Stapla diagram och textbox vertikalt */
-  .diagram-rad {
-    flex-direction: column;
-  }
+  .diagram-rad { flex-direction: column; }
 
   .textbox {
     width: 100%;
     box-sizing: border-box;
   }
 
-  /* Kortare diagram på mobil */
-  #huvuddiagram {
-    height: 300px;
-  }
+  /* Dölj inforutan som standard på mobil – sparar plats */
+  #textbox-innehall { display: none; }
 
   /* Tabeller under varandra */
   .toppbotten-wrapper {
@@ -408,25 +402,25 @@ body {
     gap: 20px;
   }
 
-  /* Exportknappar sida vid sida på mobil */
+  /* Exportknappar sida vid sida */
   .sidebar-section .export-knapp {
     display: inline-block;
     width: calc(50% - 4px);
   }
-}
 
-@media (max-width: 480px) {
-  #huvuddiagram {
-    height: 250px;
+  /* Applikationsrubrik mindre på mobil */
+  .app-rubrik {
+    font-size: 17px;
+    padding: 12px 12px 6px 12px;
   }
-}
 
-/* Mobile: kortare diagram */
-@media (max-width: 768px) {
+  /* Diagramhöjd via wrappern */
   .diagram-wrapper { height: 300px; }
 }
+
 @media (max-width: 480px) {
-  .diagram-wrapper { height: 250px; }
+  .diagram-wrapper { height: 260px; }
+  .app-rubrik { font-size: 15px; }
 }
 
 /* Kommunval-header: etikett + aktiv-kryssruta på samma rad */

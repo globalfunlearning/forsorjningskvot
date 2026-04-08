@@ -4288,9 +4288,7 @@ margin-top: 12px;
 
 @media (max-width: 768px) {
 
-.app-wrapper {
-flex-direction: column;
-}
+.app-wrapper { flex-direction: column; }
 .sidebar {
 width: 100%;
 box-sizing: border-box;
@@ -4301,17 +4299,13 @@ padding-left: 0;
 padding-top: 16px;
 }
 
-.diagram-rad {
-flex-direction: column;
-}
+.diagram-rad { flex-direction: column; }
 .textbox {
 width: 100%;
 box-sizing: border-box;
 }
 
-#huvuddiagram {
-height: 300px;
-}
+#textbox-innehall { display: none; }
 
 .toppbotten-wrapper {
 flex-direction: column;
@@ -4322,18 +4316,17 @@ gap: 20px;
 display: inline-block;
 width: calc(50% - 4px);
 }
-}
-@media (max-width: 480px) {
-#huvuddiagram {
-height: 250px;
-}
+
+.app-rubrik {
+font-size: 17px;
+padding: 12px 12px 6px 12px;
 }
 
-@media (max-width: 768px) {
 .diagram-wrapper { height: 300px; }
 }
 @media (max-width: 480px) {
-.diagram-wrapper { height: 250px; }
+.diagram-wrapper { height: 260px; }
+.app-rubrik { font-size: 15px; }
 }
 
 .kommunval-header {
