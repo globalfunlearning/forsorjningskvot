@@ -1,65 +1,134 @@
 # Demografisk försörjningskvot – Sveriges kommuner
 
-Interaktiv webbapplikation för analys av demografisk försörjningskvot i Sveriges kommuner, framtagen inom stadsledningskontoret, Göteborgs Stad.
+Interaktiv webbapplikation som visar demografisk försörjningskvot för alla Sveriges kommuner och län 2000–2025, med möjlighet att lägga till SCB:s befolkningsprognos 2026–2050.
+
+**Länk:** https://globalfunlearning.github.io/forsorjningskvot/
 
 ![Skärmdump av applikationen](skärmdump.png)
 
-## Om applikationen
+---
 
-Applikationen visar hur den demografiska försörjningskvoten skiljer sig åt mellan Sveriges kommuner under perioden 2000–2025. Måttet visar hur många personer som befinner sig utanför arbetsför ålder (0–19 år och 65+) per 100 personer i arbetsför ålder (20–64 år) – ett rent demografiskt mått som inte tar hänsyn till faktisk sysselsättning.
+## Funktioner
 
-Tre mått kan väljas:
-- **Totalt** – summan av barn och äldre
-- **Från äldre** – personer 65 år och äldre
-- **Från yngre** – personer 0–19 år
+- Välj mellan tre mått: totalt (0–19 + 65+), från äldre (65+) eller från yngre (0–19)
+- Jämför valfria kommuner eller län mot varandra
+- Visa Sverige, min/max-linjer och grå bakgrundslinjer för alla kommuner
+- **Prognos 2026–2050** (SCB): lägg till streckade prognoslinjer med ljusblå bakgrund för prognosåren
+- Tabeller: topp/botten 5, Göteborgsregionens kommuner, 10 största kommunerna
+- Exportera diagram som PNG eller data som TSV (klistras in i Excel)
+- Responsiv layout – fungerar på mobil och desktop
 
-Längst ner i kommunlistan finns även Sveriges 21 län, som kan väljas och jämföras på samma sätt som kommuner.
+---
+
+## Filstruktur
+
+```
+forsorjningskvot/
+├── index.qmd            # Huvudfil – Quarto + HTML + JavaScript
+├── styles.css           # CSS enligt Göteborgs grafiska profil
+├── _quarto.yml          # Quarto-konfiguration
+├── gbg_li_rgb.svg       # Göteborgs logotyp
+├── hamta_data.R         # Hämtar historiska data från SCB API → data/forsorjningskvot.json
+├── hamta_prognos.R      # Hämtar SCB:s befolkningsprognos → data/prognos.json
+├── README.md            # Projektbeskrivning
+├── skärmdump.png        # Skärmdump i README
+├── data/                # Genererad JSON (gitignorerad)
+└── docs/                # Renderad HTML (publiceras via GitHub Pages)
+```
+
+---
 
 ## Arbetsflöde
 
-Data hämtas direkt från SCB:s statistikdatabas via API med R-paketet `pxweb`. När ny statistik finns tillgänglig (normalt varje år) körs datahämtningen om och applikationen renderas på nytt.
-
-```
-hamta_data.R          → data/forsorjningskvot.json
-quarto render         → docs/index.html
-git push origin main  → publiceras på GitHub Pages
-```
-
-### Uppdatera med nytt statistikår
-
 ```r
-# 1. Hämta ny data från SCB
-source("hamta_data.R")
+# 1. Hämta historiska data (behövs bara vid nytt statistikår)
+source("hamta_data.R")        # → data/forsorjningskvot.json
 
-# 2. Rendera HTML
-# I Terminal:
-# quarto render index.qmd --to html
-
-# 3. Pusha till GitHub
-# git add .
-# git commit -m "Uppdatering statistik ÅÅÅÅ"
-# git push origin main
+# 2. Hämta prognosdata (behövs vid ny SCB-prognos)
+source("hamta_prognos.R")     # → data/prognos.json
 ```
 
-## Filer
+```bash
+# 3. Rendera HTML
+quarto render index.qmd --to html
 
-| Fil | Beskrivning |
-|-----|-------------|
-| `hamta_data.R` | Hämtar data från SCB API och exporterar till JSON |
-| `index.qmd` | Quarto-fil som renderar HTML-applikationen |
-| `styles.css` | Stilmall enligt Göteborgs Stads grafiska profil |
-| `_quarto.yml` | Quarto-projektkonfiguration |
-| `gbg_li_rgb.svg` | Göteborgs Stads logotyp |
-| `data/` | Genererad JSON-data (skapas av hamta_data.R) |
-| `docs/` | Renderad HTML som publiceras via GitHub Pages |
+# 4. Publicera
+git add . && git commit -m "uppdatera data" && git push
+```
 
-## Teknisk stack
+---
 
-- **R + pxweb** – datahämtning från SCB API
-- **Quarto** – dokumentformat och rendering
-- **Chart.js** – interaktiva diagram
-- **GitHub Pages** – publicering
+## JSON-struktur
 
-## OBS
+### `data/forsorjningskvot.json`
+```json
+{
+  "senaste_ar": 2025,
+  "ar": [2000, 2001, ..., 2025],
+  "totalt": {
+    "kommuner": [{ "namn": "Göteborg", "varden": [58.4, ...] }],
+    "lan":      [{ "namn": "Västra Götalands län", "varden": [...] }],
+    "sverige":  [70.4, ...]
+  },
+  "aldre": { ... },
+  "yngre": { ... }
+}
+```
 
-Detta är ett arbetsmaterial för internt bruk inom stadsledningskontoret, Göteborgs Stad. Applikationen publiceras via GitHub Pages och ingår inte i Göteborgs Stads officiella webbplats goteborg.se.
+### `data/prognos.json`
+```json
+{
+  "ar": [2026, 2027, ..., 2050],
+  "forsta_ar": 2026,
+  "sista_ar": 2050,
+  "totalt": {
+    "kommuner": [{ "namn": "Göteborg", "varden": [59.1, ...] }],
+    "lan":      [{ "namn": "Västra Götalands län", "varden": [...] }],
+    "sverige":  [78.2, ...]
+  },
+  "aldre": { ... },
+  "yngre": { ... }
+}
+```
+
+---
+
+## Teknikval
+
+| Teknik | Motivering |
+|--------|-----------|
+| Chart.js | Enkelt, snabbt, professionellt utseende |
+| Quarto | R bäddar in JSON i HTML vid rendering |
+| `embed-resources: true` | Allt i en HTML-fil – fungerar offline och på GitHub Pages |
+| pxweb (R) | Hämtar från SCB API |
+| GitHub Pages | Statisk publicering utan server |
+
+---
+
+## Göteborgs grafiska profil
+
+```css
+--gb-bla:   #0076bc   /* Göteborgsblå – Kommun 1, knappar */
+--gb-rosa:  #e8457a   /* Rosa – Kommun 2 */
+--gb-gul:   #f0a800   /* Gul – Sverige-linjen */
+--gb-mork:  #1a3a5c   /* Mörkblå – rubriker, text */
+```
+
+---
+
+## SCB-tabeller
+
+| Tabell | Innehåll |
+|--------|---------|
+| `FkvotHVD` | Historisk försörjningskvot per kommun och län 2000– |
+| `BefProgRegFakN` | Befolkningsprognos per kommun, ettårsklasser, 2024–2070 |
+
+---
+
+## Att tänka på
+
+- `data/`-mappen är gitignorerad – JSON-filerna genereras lokalt och bäddas in vid `quarto render`
+- Knivsta har `null`-värden för 2000–2001 (kommunen tillkom 2002) – hanteras korrekt
+- `senaste_ar` i JSON uppdaterar automatiskt alla årsrubriker i tabellerna
+- Prognosdata (`prognos.json`) är valfritt – saknas filen visas en informationstext i sidebaren
+- SCB:s prognos sträcker sig till 2070 men appen visar bara 2026–2050
