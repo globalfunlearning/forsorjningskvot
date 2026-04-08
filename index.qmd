@@ -304,7 +304,6 @@ const FARG_GUL     = "#f0a800";
 const FARG_MRK     = "#1a3a5c";
 
 // Göteborgsregionens 13 kommuner (GR) – kommunnamn som delsträngar
-// Matchas mot kommunlistan från data via includes() nedan
 const GR_NAMN = [
   "Ale", "Alingsås", "Göteborg", "Härryda", "Kungsbacka",
   "Kungälv", "Lerum", "Lilla Edet", "Mölndal", "Partille",
@@ -317,8 +316,6 @@ const STORSTA_10_NAMN = [
   "Västerås", "Örebro", "Helsingborg", "Jönköping", "Norrköping"
 ];
 
-// Bygg GR_SET som fullständiga kommunnamn från data (t.ex. "1480 Göteborg")
-// Görs efter att data laddats – se initialisering längst ner
 let GR_SET = [];
 
 // Titlar per mått
@@ -333,14 +330,11 @@ const TITLAR = {
 // 2. HJÄLPFUNKTIONER
 // =============================================================================
 
-// Formatera tal: 1 decimal med komma (svensk standard)
 const fmt = v => (v == null || isNaN(v)) ? "–"
   : v.toFixed(1).replace(".", ",");
 
-// Ta bort kommunkod (t.ex. "1480 Göteborg" → "Göteborg")
 const rensaNamn = n => n ? n.replace(/^\d{4} /, "") : "";
 
-// Hämta regiondata för ett mått – söker i kommuner och läns
 const hamtaKommun = (mattData, namn) =>
   mattData.kommuner.find(k => k.namn === namn) ||
   (mattData.lan ? mattData.lan.find(k => k.namn === namn) : null);
@@ -350,19 +344,15 @@ const hamtaKommun = (mattData, namn) =>
 // 3. DATAINLÄSNING
 // =============================================================================
 
-// Data injicerades av R som en dold JSON-tagg
-// Data injicerades av R – läses från dold JSON-tagg
 const data        = JSON.parse(document.getElementById("app-data").textContent);
 const ar          = data.ar;
 const ar_labels   = ar.map(String);
-const sista_idx   = ar.length - 1;          // index för senaste statistikår
-const senaste_ar  = data.senaste_ar;         // senaste år, t.ex. 2025
+const sista_idx   = ar.length - 1;
+const senaste_ar  = data.senaste_ar;
 const kommuner    = data.totalt.kommuner.map(k => k.namn);
 const lan         = data.totalt.lan ? data.totalt.lan.map(k => k.namn) : [];
 
-// Kommuner sorterade i bokstavsordning
 const kom_sort    = [...kommuner].sort((a,b) => a.localeCompare(b,"sv"));
-// Länen sorterade i bokstavsordning – visas sist i dropdown
 const lan_sort    = [...lan].sort((a,b) => a.localeCompare(b,"sv"));
 
 
@@ -370,7 +360,6 @@ const lan_sort    = [...lan].sort((a,b) => a.localeCompare(b,"sv"));
 // 4. DROPDOWN MED SÖKFUNKTION
 // =============================================================================
 
-// Fyll en dropdown med kommunnamn följt av länen (som optgroup)
 function fyllDropdown(elId, defaultNamn, inkluderaTomt) {
   const el = document.getElementById(elId);
   el.innerHTML = "";
@@ -379,15 +368,13 @@ function fyllDropdown(elId, defaultNamn, inkluderaTomt) {
     opt.value = ""; opt.textContent = "–";
     el.appendChild(opt);
   }
-  // Kommuner
   kom_sort.forEach(namn => {
     const opt       = document.createElement("option");
     opt.value       = namn;
-    opt.textContent = namn;   // Namn utan kommunkod (redan rensat i R)
+    opt.textContent = namn;
     if (namn === defaultNamn) opt.selected = true;
     el.appendChild(opt);
   });
-  // Länen som separat grupp längst ner
   if (lan_sort.length > 0) {
     const grupp = document.createElement("optgroup");
     grupp.label = "── Län ──";
@@ -402,9 +389,6 @@ function fyllDropdown(elId, defaultNamn, inkluderaTomt) {
   }
 }
 
-// Filtrera dropdown baserat på söktext – Safari-kompatibel version.
-// Safari ignorerar style.display på <option>-element, så vi återskapar
-// listan vid varje tangenttryckning istället för att dölja alternativ.
 function koppladSok(sokId, selectId) {
   const sokEl    = document.getElementById(sokId);
   const selectEl = document.getElementById(selectId);
@@ -414,7 +398,6 @@ function koppladSok(sokId, selectId) {
     const text        = sokEl.value.toLowerCase().trim();
     const nuvarandeVal = selectEl.value;
 
-    // Rensa och återbygg listan med matchande alternativ
     selectEl.innerHTML = "";
 
     if (inkluderaTomt) {
@@ -424,7 +407,6 @@ function koppladSok(sokId, selectId) {
       selectEl.appendChild(opt);
     }
 
-    // Sök i kommuner och läns (alla regioner)
     const alla_regioner = [...kom_sort, ...lan_sort];
     const matchande = alla_regioner.filter(namn =>
       namn.toLowerCase().includes(text)
@@ -440,18 +422,13 @@ function koppladSok(sokId, selectId) {
   });
 }
 
-// Initiera dropdowns
 const gbg = kommuner.find(k => k === "Göteborg") || kommuner[0];
 fyllDropdown("select-k1", gbg,  false);
 fyllDropdown("select-k2", "",   true);
 koppladSok("search-k1", "select-k1");
 koppladSok("search-k2", "select-k2");
 
-// Bygg GR_SET: matcha kommunnamn mot GR_NAMN-listan
-// Kommunnamnen har inga koder nu – matcha direkt
 GR_SET = kommuner.filter(k => GR_NAMN.some(gr => k === gr));
-
-// Bygg STORSTA_SET: de 10 folkrikaste kommunerna som finns i data
 const STORSTA_SET = kommuner.filter(k => STORSTA_10_NAMN.some(n => k === n));
 
 
@@ -461,7 +438,6 @@ const STORSTA_SET = kommuner.filter(k => STORSTA_10_NAMN.some(n => k === n));
 
 let chart = null;
 
-// Skapa ett Chart.js-dataset för en färgad linje (k1, k2, Sverige, min, max)
 function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
   return {
     label,
@@ -480,7 +456,6 @@ function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
   };
 }
 
-// Beräkna min/max per år över alla kommuner
 function beraknaMinMax(mattData) {
   const n = ar.length;
   const minVarden = new Array(n).fill(Infinity);
@@ -499,7 +474,6 @@ function beraknaMinMax(mattData) {
   };
 }
 
-// Uppdatera förklaringsrutan (legend) under diagrammet
 function uppdateraLegend(k1, k2, visSve, visMinMax) {
   const legendEl = document.getElementById("legend-rad");
   const poster   = [];
@@ -520,7 +494,6 @@ function uppdateraLegend(k1, k2, visSve, visMinMax) {
   ).join("");
 }
 
-// Huvudfunktion: uppdatera diagram baserat på aktuella val
 function uppdateraDiagram() {
   const matt     = document.querySelector("input[name='matt']:checked").value;
   const k1       = document.getElementById("select-k1").value;
@@ -542,11 +515,11 @@ function uppdateraDiagram() {
       pointHoverRadius: 0,
       borderWidth:      0.35,
       tension:          0,
-      order:            20    // Lägst prioritet – ritas bakerst
+      order:            20
     });
   });
 
-  // --- Min/max-linjer (mörkare grå, streckade) ---
+  // --- Min/max-linjer ---
   if (visMinMax) {
     const { min, max } = beraknaMinMax(mData);
     dsets.push(skapaDs("Lägsta kommun", min, FARG_GRA_MRK, 8, false, true));
@@ -558,14 +531,14 @@ function uppdateraDiagram() {
     dsets.push(skapaDs("Sverige", mData.sverige, FARG_GUL, 3, true));
   }
 
-  // --- Kommun 2 (rosa) – bara om kryssrutan "Visa" är ikryssad ---
+  // --- Kommun 2 (rosa) ---
   const k2aktiv = document.getElementById("check-k2-aktiv").checked;
   if (k2 && k2aktiv) {
     const k = hamtaKommun(mData, k2);
     if (k) dsets.push(skapaDs(rensaNamn(k2), k.varden, FARG_ROSA, 2, true));
   }
 
-  // --- Kommun 1 (blå) – bara om kryssrutan "Visa" är ikryssad ---
+  // --- Kommun 1 (blå) ---
   const k1aktiv = document.getElementById("check-k1-aktiv").checked;
   if (k1 && k1aktiv) {
     const k = hamtaKommun(mData, k1);
@@ -600,12 +573,10 @@ function uppdateraDiagram() {
             align:   "start",
             padding: { bottom: 14 }
           },
-          // Dölj den inbyggda legenden – vi har vår egen
           legend: { display: false },
           tooltip: {
             mode:        "index",
             intersect:   false,
-            // Visa bara de färgade linjerna (order < 10) i tooltip
             filter:      item => item.dataset.order < 10,
             backgroundColor: FARG_MRK,
             titleColor:  "white",
@@ -623,7 +594,6 @@ function uppdateraDiagram() {
               color:       "#555",
               font:        { size: 13 },
               maxRotation: 0,
-              // Visa år som är delbara med 5 (2000, 2005, 2010...)
               callback:    (v, i) => parseInt(ar_labels[i]) % 5 === 0 ? ar_labels[i] : ""
             },
             grid: { color: "#f0f0f0" }
@@ -643,7 +613,6 @@ function uppdateraDiagram() {
     }
   );
 
-  // Uppdatera legend och tabeller
   uppdateraLegend(
     k1aktiv ? k1 : null,
     k2aktiv ? k2 : null,
@@ -657,7 +626,6 @@ function uppdateraDiagram() {
 // 6. TABELLER
 // =============================================================================
 
-// Hjälp: fyll en tabell med rader
 function fyllTabell(id, rader) {
   document.querySelector("#" + id + " tbody").innerHTML =
     rader.map(r =>
@@ -665,7 +633,6 @@ function fyllTabell(id, rader) {
     ).join("");
 }
 
-// Uppdatera alla tabeller baserat på aktuellt mått
 function uppdateraTabeller(matt) {
   const mData      = data[matt];
   const visTb      = document.getElementById("check-tabell").checked;
@@ -677,7 +644,6 @@ function uppdateraTabeller(matt) {
   const visStorsta = document.getElementById("check-storsta").checked;
   const stWrapper  = document.getElementById("storsta-wrapper");
 
-  // Visa/dölj hela tabellsektionen om inget ska visas
   sektionen.style.display = (visTb || visGR || visStorsta) ? "block" : "none";
 
   // --- Topp/botten 5 ---
@@ -729,8 +695,6 @@ function uppdateraTabeller(matt) {
 // 7. EXPORTFUNKTIONER
 // =============================================================================
 
-// Kopiera diagrammet som PNG till urklipp (eller ladda ner om ej stöds).
-// Legenden ritas in på en tillfällig offscreen-canvas så den syns i bilden.
 async function kopieraDiagram() {
   if (!chart) return;
 
@@ -738,43 +702,34 @@ async function kopieraDiagram() {
   const w = srcCanvas.width;
   const h = srcCanvas.height;
 
-  // Hämta färgade linjer för legend
   const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
   const legendH = synliga.length > 0 ? 48 : 0;
 
-  // Skapa ny canvas med extra höjd för legend
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width  = w;
   exportCanvas.height = h + legendH;
   const ctx = exportCanvas.getContext("2d");
 
-  // Vit bakgrund
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-
-  // Kopiera diagrammet
   ctx.drawImage(srcCanvas, 0, 0);
 
-  // Rita legend under diagrammet
   if (synliga.length > 0) {
     ctx.font = "bold 18px 'Open Sans', sans-serif";
     let x = 20;
     const y = h + 16;
     synliga.forEach(ds => {
-      // Färgad linje
       ctx.strokeStyle = ds.borderColor;
       ctx.lineWidth   = 3;
       ctx.beginPath();
       ctx.moveTo(x, y + 6);
       ctx.lineTo(x + 26, y + 6);
       ctx.stroke();
-      // Punkt
       ctx.fillStyle = ds.borderColor;
       ctx.beginPath();
       ctx.arc(x + 13, y + 6, 5, 0, Math.PI * 2);
       ctx.fill();
       x += 32;
-      // Etikett
       ctx.fillStyle = "#1a1a1a";
       ctx.fillText(ds.label, x, y + 10);
       x += ctx.measureText(ds.label).width + 28;
@@ -799,11 +754,9 @@ async function kopieraDiagram() {
   });
 }
 
-// Kopiera diagrammets data som TSV (klistrar in i Excel)
 function kopieraSiffror() {
   if (!chart) return;
 
-  // Hämta bara de färgade dataseten (order < 10)
   const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
   if (!synliga.length) { alert("Inga valda linjer att kopiera."); return; }
 
@@ -839,19 +792,15 @@ function vaxlaTextbox() {
 // 9. HÄNDELSELYSSNARE
 // =============================================================================
 
-// Måttknappar
 document.querySelectorAll("input[name='matt']")
   .forEach(el => el.addEventListener("change", uppdateraDiagram));
 
-// Kommunval
 ["select-k1", "select-k2"].forEach(id =>
   document.getElementById(id).addEventListener("change", uppdateraDiagram));
 
-// Aktiv/inaktiv-kryssrutor för kommuner
 ["check-k1-aktiv", "check-k2-aktiv"].forEach(id =>
   document.getElementById(id).addEventListener("change", uppdateraDiagram));
 
-// Övriga kryssrutor
 ["check-sverige", "check-minmax", "check-tabell", "check-gr", "check-storsta"].forEach(id =>
   document.getElementById(id).addEventListener("change", uppdateraDiagram));
 
@@ -872,6 +821,31 @@ document.querySelectorAll("th").forEach(th => {
   }
 });
 
+// Första render
 uppdateraDiagram();
+
+// -----------------------------------------------------------------------------
+// MOBILFIX: Tvinga omritning vid orientationsbyte (iOS/Android).
+// iOS skickar orientationchange innan layouten är klar – 150ms fördröjning
+// säkerställer att wrapper har fått sin slutliga storlek innan chart.resize().
+// -----------------------------------------------------------------------------
+window.addEventListener("orientationchange", () => {
+  setTimeout(() => {
+    if (chart) chart.resize();
+  }, 150);
+});
+
+// -----------------------------------------------------------------------------
+// MOBILFIX: ResizeObserver på diagram-wrappern.
+// Triggas direkt när wrappern får ny storlek (t.ex. vid sidoladdning på mobil
+// eller när sidebar kollapsar till kolumn). Säkrare än window "resize" som
+// kan missa layout-förändringar inom sidan.
+// -----------------------------------------------------------------------------
+const diagramWrapper = document.querySelector(".diagram-wrapper");
+if (diagramWrapper && typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(() => {
+    if (chart) chart.resize();
+  }).observe(diagramWrapper);
+}
 </script>
 ```

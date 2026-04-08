@@ -34,6 +34,7 @@ body {
   gap: 0;
   align-items: flex-start;
   margin-top: 8px;
+  padding-top: 16px;
 }
 
 /* Sidebar */
@@ -372,7 +373,9 @@ body {
 
 @media (max-width: 768px) {
   /* Stapla sidebar ovanför innehåll på mobil */
-  .app-wrapper { flex-direction: column; }
+  .app-wrapper {
+    flex-direction: column;
+  }
 
   .sidebar {
     width: 100%;
@@ -383,10 +386,15 @@ body {
   .huvudpanel {
     padding-left: 0;
     padding-top: 16px;
+    /* Säkerställ att panelen aldrig är bredare än skärmen */
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Stapla diagram och textbox vertikalt */
-  .diagram-rad { flex-direction: column; }
+  .diagram-rad {
+    flex-direction: column;
+  }
 
   .textbox {
     width: 100%;
@@ -414,8 +422,20 @@ body {
     padding: 12px 12px 6px 12px;
   }
 
-  /* Diagramhöjd via wrappern */
-  .diagram-wrapper { height: 300px; }
+  /* Outer wrapper: ta full bredd så chart-wrappern har korrekt referensram */
+  .diagram-wrapper-outer {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Diagram-wrapper: explicit bredd + höjd.
+     position: relative är kritiskt – canvas är absolut-positionerad inuti. */
+  .diagram-wrapper {
+    height: 320px;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+  }
 }
 
 @media (max-width: 480px) {
@@ -506,11 +526,6 @@ body {
 
 /* Öka diagramtiteln i Chart.js via CSS går ej – görs i JS-options.
    Här säkerställer vi att sidans övriga typografi är tydlig. */
-
-.app-wrapper {
-  padding-top: 16px;
-}
-
 
 /* Dölj Quartos automatiska sidtitel – vi visar rubriken manuellt under menyraden */
 .quarto-title-block, h1.title, .title {
