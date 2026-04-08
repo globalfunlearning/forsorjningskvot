@@ -1,47 +1,610 @@
-/* Göteborgs Stad – enkel stilmall för försörjningskvot-app */
+/* =============================================================================
+   DEMOGRAFISK FÖRSÖRJNINGSKVOT – Göteborgs Stad
+   Stilmall för interaktiv webbapp
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   DESIGNVARIABLER (Göteborgs grafiska profil)
+   ----------------------------------------------------------------------------- */
+:root {
+  --gb-bla:    #0076bc;
+  --gb-rosa:   #e8457a;
+  --gb-gul:    #f0a800;
+  --gb-mork:   #1a3a5c;
+  --text:      #1a1a1a;
+  --axel:      #555555;
+  --kant:      #dee2e6;
+  --bakgrund:  #f8f9fa;
+  --sidebar-w: 250px;
+}
 
 body {
-  font-family: 'Source Sans Pro', sans-serif;
+  font-family: 'Open Sans', 'Source Sans Pro', sans-serif;
+  color: var(--text);
+  background: white;
+  margin: 0;
 }
 
-.navbar, .navbar-default {
-  background-color: #0076bc !important;
-  border: none;
+/* =============================================================================
+   LAYOUT: SIDEBAR + HUVUDPANEL
+   ============================================================================= */
+
+.app-wrapper {
+  display: flex;
+  gap: 0;
+  align-items: flex-start;
+  margin-top: 8px;
 }
 
-h1.title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #1a3a5c;
-}
-
-.card-header {
-  background-color: #f0f4f8;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #1a3a5c;
-  border-bottom: 2px solid #0076bc;
-}
-
+/* Sidebar */
 .sidebar {
-  font-size: 0.88rem;
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--bakgrund);
+  border: 1px solid var(--kant);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 13px;
+  position: sticky;
+  top: 10px;
 }
 
-.form-label, label {
-  font-size: 0.85rem;
+/* Huvudpanel */
+.huvudpanel {
+  flex: 1;
+  padding-left: 20px;
+  min-width: 0;
 }
 
-table.table {
-  font-size: 0.85rem;
+/* =============================================================================
+   SIDEBAR-ELEMENT
+   ============================================================================= */
+
+.sidebar-section {
+  margin-bottom: 4px;
 }
 
-table.table th {
-  background-color: #e8f4fb;
-  color: #1a3a5c;
+.sidebar-label {
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--gb-mork);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Kommunetikett-färger */
+.k1-label  { color: var(--gb-bla)  !important; text-transform: none; font-size: 13px; }
+.k2-label  { color: var(--gb-rosa) !important; text-transform: none; font-size: 13px; }
+.sve-label { color: var(--gb-gul); font-weight: 700; }
+
+.sidebar-divider {
+  border: none;
+  border-top: 1px solid var(--kant);
+  margin: 12px 0;
+}
+
+/* Radiobuttons */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.radio-option input[type="radio"] {
+  accent-color: var(--gb-bla);
+  cursor: pointer;
+}
+
+/* Kryssrutor */
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.checkbox-option input[type="checkbox"] {
+  accent-color: var(--gb-bla);
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* Sökfält för kommuner */
+.kommunsok {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--kant);
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+  font-size: 13px;
+  box-sizing: border-box;
+  background: white;
+}
+
+.kommunsok:focus {
+  outline: none;
+  border-color: var(--gb-bla);
+}
+
+/* Dropdown för kommunval */
+.kommunval {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--kant);
+  border-radius: 0 0 4px 4px;
+  font-size: 13px;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.kommunval:focus {
+  outline: none;
+  border-color: var(--gb-bla);
+  box-shadow: 0 0 0 2px rgba(0,118,188,0.15);
+}
+
+/* Exportknappar */
+.export-knapp {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  background: var(--gb-bla);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.export-knapp:hover {
+  background: #005a94;
+}
+
+/* Sidofot */
+.sidebar-footer {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* =============================================================================
+   DIAGRAM
+   ============================================================================= */
+
+.diagram-rad {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* Wrappern måste ha fast höjd – Chart.js läser höjden härifrån.
+   Utan detta växer canvas i en oändlig loop när responsive: true är satt. */
+.diagram-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 440px;
+}
+
+/* Canvas fyller wrappern via absolut positionering */
+#huvuddiagram {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Reservutrymme för legend under canvas */
+.diagram-wrapper-outer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Legend under diagrammet */
+.legend-rad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.legend-post {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.legend-farg {
+  display: inline-block;
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.legend-text {
   font-weight: 600;
 }
 
-hr {
-  border-color: #e0e0e0;
-  margin: 0.75rem 0;
+/* =============================================================================
+   FÄLLBAR INFORUTA
+   ============================================================================= */
+
+.textbox {
+  width: 210px;
+  flex-shrink: 0;
+  background: #f0f4f8;
+  border-left: 4px solid var(--gb-bla);
+  border-radius: 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.textbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 14px 8px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.textbox-rubrik {
+  color: var(--gb-mork);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+.textbox-toggle {
+  background: none;
+  border: none;
+  color: var(--gb-mork);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 0 0 6px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.textbox-innehall {
+  padding: 0 14px 14px 14px;
+}
+
+.textbox-innehall p {
+  margin: 0 0 10px 0;
+}
+
+.textbox-innehall p:last-child {
+  margin-bottom: 0;
+}
+
+/* =============================================================================
+   TABELLER
+   ============================================================================= */
+
+.tabell-sektion {
+  margin-top: 24px;
+}
+
+.toppbotten-wrapper {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+
+.tabell-rubrik {
+  font-weight: 700;
+  color: var(--gb-mork);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.data-tabell {
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 210px;
+}
+
+.data-tabell th {
+  background: #e8f4fb;
+  color: var(--gb-mork);
+  font-weight: 700;
+  padding: 6px 14px;
+  text-align: left;
+  border-bottom: 2px solid var(--gb-bla);
+}
+
+.data-tabell td {
+  padding: 5px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.data-tabell tr:nth-child(even) td {
+  background: #f9f9f9;
+}
+
+/* Högerställda tal med tabular-siffror */
+.td-tal {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================================================
+   KÄLLHÄNVISNING
+   ============================================================================= */
+
+.kalla-text {
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  margin-top: 12px;
+}
+
+/* =============================================================================
+   MOBILRESPONSIVITET
+   ============================================================================= */
+
+@media (max-width: 768px) {
+  /* Stapla sidebar ovanför innehåll på mobil */
+  .app-wrapper {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    box-sizing: border-box;
+    position: static;
+  }
+
+  .huvudpanel {
+    padding-left: 0;
+    padding-top: 16px;
+  }
+
+  /* Stapla diagram och textbox vertikalt */
+  .diagram-rad {
+    flex-direction: column;
+  }
+
+  .textbox {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Kortare diagram på mobil */
+  #huvuddiagram {
+    height: 300px;
+  }
+
+  /* Tabeller under varandra */
+  .toppbotten-wrapper {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Exportknappar sida vid sida på mobil */
+  .sidebar-section .export-knapp {
+    display: inline-block;
+    width: calc(50% - 4px);
+  }
+}
+
+@media (max-width: 480px) {
+  #huvuddiagram {
+    height: 250px;
+  }
+}
+
+/* Mobile: kortare diagram */
+@media (max-width: 768px) {
+  .diagram-wrapper { height: 300px; }
+}
+@media (max-width: 480px) {
+  .diagram-wrapper { height: 250px; }
+}
+
+/* Kommunval-header: etikett + aktiv-kryssruta på samma rad */
+.kommunval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kommunval-header .sidebar-label {
+  margin-bottom: 0;
+}
+
+/* Aktiv/inaktiv-kryssruta bredvid kommunetiketten */
+.aktiv-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aktiv-label input[type="checkbox"] {
+  accent-color: var(--gb-bla);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+
+/* =============================================================================
+   GÖTEBORGS STAD – SIDHUVUD (grafisk profil)
+   ============================================================================= */
+
+/* Dölj Quartos inbyggda navbar – vi bygger vår egen */
+.navbar, .navbar-default, nav.navbar {
+  display: none !important;
+}
+
+/* Logotyprad: vit bakgrund */
+.gbg-logotyp-rad {
+  background: white;
+  padding: 8px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.gbg-logotyp {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+/* Svart menyrad */
+.gbg-menyrad {
+  background: #1a1a1a;
+  padding: 13px 20px;
+  display: flex;
+  align-items: center;
+}
+
+.gbg-meny-titel {
+  color: white;
+  font-size: 14px;
+  font-weight: 400;
+  font-family: 'Open Sans', sans-serif;
+  letter-spacing: 0.2px;
+}
+
+/* Kompensera för att vi tagit bort Quartos navbar */
+body {
+  padding-top: 0 !important;
+}
+
+.page-layout-full > .content {
+  padding-top: 0 !important;
+}
+
+/* =============================================================================
+   DIAGRAMTITEL OCH AXLAR – större text för PowerPoint-läsbarhet
+   ============================================================================= */
+
+/* Öka diagramtiteln i Chart.js via CSS går ej – görs i JS-options.
+   Här säkerställer vi att sidans övriga typografi är tydlig. */
+
+.app-wrapper {
+  padding-top: 16px;
+}
+
+
+/* Dölj Quartos automatiska sidtitel – vi visar rubriken manuellt under menyraden */
+.quarto-title-block, h1.title, .title {
+  display: none !important;
+}
+
+/* Applikationsrubrik under svarta menyraden */
+.app-rubrik {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  padding: 16px 20px 8px 20px;
+  margin: 0;
+}
+
+/* =============================================================================
+   SIDFOT – inspirerad av goteborg.se
+   ============================================================================= */
+
+.gbg-footer {
+  margin-top: 48px;
+  font-family: 'Open Sans', sans-serif;
+}
+
+/* Övre del – mörkgrå bakgrund, kontakt och länkar */
+.gbg-footer-ovre {
+  background: #3a3a3a;
+  padding: 36px 28px;
+  display: flex;
+  gap: 60px;
+  flex-wrap: wrap;
+}
+
+.gbg-footer-kolumn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gbg-footer-rubrik {
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+}
+
+.gbg-footer-lank {
+  color: #c8dde9;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s;
+}
+
+.gbg-footer-lank:hover {
+  color: white;
+}
+
+/* Nedre del – mörkare bakgrund, logotyp och disclaimer */
+.gbg-footer-nedre {
+  background: #2a2a2a;
+  padding: 28px 28px 32px 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+/* Logotyp i footer – filtreras till vit */
+.gbg-footer-logotyp {
+  height: 44px;
+  width: auto;
+  flex-shrink: 0;
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
+}
+
+.gbg-footer-disclaimer {
+  color: #aaa;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 600px;
+}
+
+/* Mobil */
+@media (max-width: 600px) {
+  .gbg-footer-ovre { flex-direction: column; gap: 28px; }
+  .gbg-footer-nedre { flex-direction: column; }
 }

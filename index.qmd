@@ -1,282 +1,877 @@
 ---
 title: "Demografisk försörjningskvot – Sveriges kommuner"
-engine: knitr
 format:
   html:
     page-layout: full
     theme: flatly
     css: styles.css
-filters:
-  - shinylive
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
 ---
 
-```{shinylive-r}
-#| standalone: true
-#| viewerHeight: 800
+```{r}
+#| label: inject-data
+#| output: asis
 
+# =============================================================================
+# DATAINJICERING
+# Läser JSON-filen som genererats av hamta_data.R och bäddar in direkt
+# i HTML-sidan. Kör hamta_data.R när ny statistik finns tillgänglig.
+# =============================================================================
 
-library(shiny)
-library(tidyverse)
-library(readxl)
-library(ggplot2)
-library(ggiraph)
+library(jsonlite)
+library(here)
 
-FARG_GRA   <- "#cccccc"
-FARG_ROSA  <- "#e8457a"
-FARG_BLA   <- "#0076bc"
-FARG_GUL   <- "#f0a800"
-AXEL_FARG  <- "#666666"
-GRID_FARG  <- "#e0e0e0"
+# Hitta JSON-filen
+json_fil <- here("data", "forsorjningskvot.json")
 
-FIL <- "demografisk_försörjningskvot.xlsx"
-
-lasa_data <- function() {
-  tryCatch({
-    raw <- read_excel(FIL, sheet = 1, col_names = FALSE, skip = 2)
-    ar_vec <- as.numeric(raw[1, 3:ncol(raw)])
-    matts_rader <- which(!is.na(raw[[1]]) &
-                           raw[[1]] != "Demografisk försörjningskvot efter tabellinnehåll, region och år")
-    
-    lasa_block <- function(start_rad) {
-      nasta <- matts_rader[matts_rader > start_rad]
-      slut  <- if (length(nasta) > 0) nasta[1] - 1 else nrow(raw)
-      block <- raw[start_rad:slut, ]
-      kommundata <- block[, 2:ncol(block)]
-      colnames(kommundata) <- c("kommun", as.character(ar_vec))
-      kommundata |>
-        filter(!is.na(kommun)) |>
-        mutate(across(-kommun, as.numeric)) |>
-        filter(!is.na(.data[["2000"]])) |>
-        pivot_longer(-kommun, names_to = "ar", values_to = "kvotvarde") |>
-        mutate(ar = as.integer(ar),
-               kvotvarde = if_else(kvotvarde == 0, NA_real_, kvotvarde))
-    }
-    
-    bind_rows(
-      lasa_block(matts_rader[1]) |> mutate(matt = "totalt"),
-      lasa_block(matts_rader[2]) |> mutate(matt = "aldre"),
-      lasa_block(matts_rader[3]) |> mutate(matt = "yngre")
-    )
-  }, error = function(e) {
-    message("Fel: ", e$message)
-    expand_grid(
-      kommun = c("1480 Göteborg", "0180 Stockholm", "Sverige"),
-      ar = 2000:2025, matt = c("totalt", "aldre", "yngre")
-    ) |> mutate(kvotvarde = 60 + runif(n()) * 20)
-  })
+if (!file.exists(json_fil)) {
+  stop("JSON-filen saknas! Kör hamta_data.R först för att hämta data från SCB.")
 }
 
-df_alla    <- lasa_data()
-df_sverige <- df_alla |> filter(kommun == "Sverige")
-df_kom     <- df_alla |> filter(kommun != "Sverige")
-kommuner_lista <- c("-", sort(unique(df_kom$kommun)))
-DEFAULT_1  <- kommuner_lista[grep("1480 Göteborg", kommuner_lista)[1]]
-fmt <- function(x) formatC(round(x, 1), format = "f", digits = 1, decimal.mark = ",")
+json_str <- readLines(json_fil, warn = FALSE) |> paste(collapse = "")
 
-ui <- fluidPage(
-  tags$head(tags$style(HTML("
-    body { font-family: 'Source Sans Pro', sans-serif; background: #fff; }
-    .well { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; }
-    h4 { color: #1a3a5c; font-weight: 700; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-    th { background: #e8f4fb; color: #1a3a5c; font-weight: 600; padding: 6px 10px; text-align: left; }
-    td { padding: 5px 10px; border-bottom: 1px solid #f0f0f0; }
-    tr:nth-child(even) { background: #f9f9f9; }
-    .tabell-rubrik { font-weight: 600; color: #1a3a5c; font-size: 13px; margin: 16px 0 4px; }
-    .textbox { background: #f0f4f8; border-left: 4px solid #0076bc;
-               border-radius: 4px; padding: 16px 18px; font-size: 13px;
-               line-height: 1.6; color: #1a1a1a; }
-    .textbox h5 { color: #1a3a5c; font-weight: 700; margin-top: 0; margin-bottom: 10px; font-size: 14px; }
-  "))),
-  
-  titlePanel(h4("Demografisk försörjningskvot – Sveriges kommuner 2000–2025")),
-  
-  sidebarLayout(
-    sidebarPanel(width = 3,
-                 radioButtons("matt", "Visa försörjningskvot:",
-                              choices = c("Totalt (0–19 + 65+)" = "totalt",
-                                          "Från äldre (65+)" = "aldre",
-                                          "Från yngre (0–19)" = "yngre"),
-                              selected = "totalt"),
-                 hr(),
-                 tags$label(style = "color:#0076bc; font-weight:bold; font-size:13px;", "● Kommun 1 (blå)"),
-                 selectInput("kommun1", label = NULL, choices = kommuner_lista[-1], selected = DEFAULT_1),
-                 tags$label(style = "color:#e8457a; font-weight:bold; font-size:13px;", "● Kommun 2 (rosa)"),
-                 selectInput("kommun2", label = NULL, choices = kommuner_lista, selected = "-"),
-                 hr(),
-                 checkboxInput("visa_sverige",
-                               tags$span(style = "color:#f0a800; font-weight:bold;", "● Visa Sverige (gul)"), FALSE),
-                 hr(),
-                 checkboxInput("visa_tabell", "Visa topp/botten 5", FALSE),
-                 hr(),
-                 tags$p(style = "font-size:11px; color:#888; line-height:1.5;",
-                        "Antal utanför arbetsför ålder per 100 i ålder 20–64 år.",
-                        tags$br(), tags$br(), "Hover för värden på färgade linjer.",
-                        tags$br(), tags$br(), "Källa: SCB Statistikdatabasen")
-    ),
-    
-    mainPanel(width = 9,
-              fluidRow(
-                column(8, girafeOutput("plot", height = "440px")),
-                column(4, div(class = "textbox",
-                              tags$h5("Stor skillnad mellan Sveriges kommuner"),
-                              tags$p("Demografisk försörjningskvot visar hur många personer det finns
-            utanför den arbetsföra befolkningen jämfört med personer i arbetsför
-            ålder (20–64 år)."),
-                              tags$p("En kvot på 77 innebär att på 100 personer i arbetsför ålder
-            finns det 77 som ska försörjas. Ju högre tal, desto tyngre
-            försörjningsbörda."),
-                              tags$p("Måttet är rent demografiskt och tar inte hänsyn till
-            sysselsättningsgraden – det speglar bara åldersstrukturen."),
-                              tags$p("Försörjningskvoten skiljer sig kraftigt mellan Sveriges 290
-            kommuner beroende på inflyttning, utflyttning, barnafödande och
-            historiska befolkningstrender.")
-                ))
-              ),
-              uiOutput("tabell_ui")
-    )
-  )
-)
+# Injicera data i HTML som en dold JSON-tag (läses av JavaScript)
+cat(sprintf('<script id="app-data" type="application/json">%s</script>', json_str))
+```
 
-server <- function(input, output, session) {
-  
-  df_matt     <- reactive({ df_kom     |> filter(matt == input$matt) })
-  df_sve_matt <- reactive({ df_sverige |> filter(matt == input$matt) })
-  
-  output$plot <- renderGirafe({
-    df      <- df_matt()
-    k1      <- input$kommun1
-    k2      <- input$kommun2
-    namn_k1 <- sub("^\\d{4} ", "", k1)
-    namn_k2 <- if (k2 == "-") NULL else sub("^\\d{4} ", "", k2)
-    excl    <- c(k1, if (k2 != "-") k2)
-    df_bak  <- df |> filter(!kommun %in% excl)
-    df_k1   <- df |> filter(kommun == k1) |>
-      mutate(tooltip = paste0(namn_k1, "\n", ar, ": ", fmt(kvotvarde)))
-    senaste_ar <- max(df$ar, na.rm = TRUE)
-    val_k1     <- df_k1 |> filter(ar == senaste_ar) |> pull(kvotvarde)
+```{=html}
+<!-- =========================================================================
+     GÖTEBORGS STAD – SIDHUVUD
+     Logotyp (vit bakgrund) + svart menyrad (enligt grafisk profil)
+     ========================================================================= -->
+
+<header class="gbg-header">
+  <!-- Logotyprad: vit bakgrund med logotyp -->
+  <div class="gbg-logotyp-rad">
+    <img src="gbg_li_rgb.svg" alt="Göteborgs Stad" class="gbg-logotyp">
+  </div>
+  <!-- Svart menyrad -->
+  <nav class="gbg-menyrad">
+    <span class="gbg-meny-titel">Statistik och analys • Stadsledningskontoret, Göteborgs Stad</span>
+  </nav>
+</header>
+
+<!-- Applikationsrubrik under svarta menyraden, ovanför sidebar/diagram -->
+<h1 class="app-rubrik">Demografisk försörjningskvot – Sveriges kommuner</h1>
+
+<!-- =========================================================================
+     LAYOUT: SIDEBAR + HUVUDPANEL
+     ========================================================================= -->
+<div class="app-wrapper">
+
+  <!-- SIDEBAR ---------------------------------------------------------------->
+  <aside class="sidebar">
+
+    <!-- Måttval -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Visa försörjningskvot</div>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="matt" value="totalt" checked>
+          <span>Totalt (0–19 + 65+)</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="matt" value="aldre">
+          <span>Från äldre (65+)</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="matt" value="yngre">
+          <span>Från yngre (0–19)</span>
+        </label>
+      </div>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <!-- Kommunval med sökfunktion och aktiv/inaktiv-kryssruta -->
+    <div class="sidebar-section">
+      <div class="kommunval-header">
+        <div class="sidebar-label k1-label">Kommun 1 (blå)</div>
+        <label class="aktiv-label" title="Visa/dölj kommunen">
+          <input type="checkbox" id="check-k1-aktiv" checked>
+          <span>Visa</span>
+        </label>
+      </div>
+      <input type="text" id="search-k1" class="kommunsok" placeholder="Sök eller välj...">
+      <select id="select-k1" class="kommunval" size="1"></select>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:10px;">
+      <div class="kommunval-header">
+        <div class="sidebar-label k2-label">Kommun 2 (rosa)</div>
+        <label class="aktiv-label" title="Visa/dölj kommunen">
+          <input type="checkbox" id="check-k2-aktiv" checked>
+          <span>Visa</span>
+        </label>
+      </div>
+      <input type="text" id="search-k2" class="kommunsok" placeholder="Sök eller välj...">
+      <select id="select-k2" class="kommunval" size="1"></select>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <!-- Referenslinjer och Sverige -->
+    <div class="sidebar-section">
+      <label class="checkbox-option">
+        <input type="checkbox" id="check-sverige">
+        <span>Visa Sverige (gul)</span>
+      </label>
+      <label class="checkbox-option" style="margin-top:8px;">
+        <input type="checkbox" id="check-minmax">
+        <span>Visa linje för min/max</span>
+      </label>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <!-- Tabellval -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Visa tabell</div>
+      <label class="checkbox-option">
+        <input type="checkbox" id="check-tabell" checked>
+        <span>Topp/botten 5</span>
+      </label>
+      <label class="checkbox-option" style="margin-top:8px;">
+        <input type="checkbox" id="check-gr">
+        <span>Göteborgsregionens kommuner</span>
+      </label>
+      <label class="checkbox-option" style="margin-top:8px;">
+        <input type="checkbox" id="check-storsta">
+        <span>10 största kommunerna</span>
+      </label>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <!-- Exportknappar -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Exportera</div>
+      <button class="export-knapp" onclick="kopieraDiagram()">
+        📊 Kopiera diagram
+      </button>
+      <button class="export-knapp" onclick="kopieraSiffror()">
+        📋 Kopiera siffror
+      </button>
+    </div>
+
+    <hr class="sidebar-divider">
+
+    <!-- Fotnot -->
+    <div class="sidebar-footer">
+      Håll muspekaren över linjer för att se värden.<br><br>
+      Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad
+    </div>
+
+  </aside><!-- /SIDEBAR -->
+
+  <!-- HUVUDPANEL ------------------------------------------------------------->
+  <main class="huvudpanel">
+
+    <!-- Diagram + fällbar inforuta -->
+    <div class="diagram-rad">
+
+      <!-- Diagramyta: yttre div hanterar flex-layout, inre har fast höjd för Chart.js -->
+      <div class="diagram-wrapper-outer">
+        <div class="diagram-wrapper">
+          <canvas id="huvuddiagram"></canvas>
+        </div>
+        <!-- Förklaringsruta (legend) under diagrammet -->
+        <div id="legend-rad" class="legend-rad"></div>
+      </div>
+
+      <!-- Fällbar inforuta -->
+      <div class="textbox" id="textbox">
+        <div class="textbox-header" onclick="vaxlaTextbox()">
+          <h3 class="textbox-rubrik">Stor skillnad mellan Sveriges kommuner</h3>
+          <button class="textbox-toggle" id="textbox-toggle" title="Dölj/visa text">▲</button>
+        </div>
+        <div class="textbox-innehall" id="textbox-innehall">
+          <p>Demografiska försörjningskvoten visar antal personer
+          utanför den arbetsföra befolkningen jämfört med antal personer i
+          arbetsför ålder (20–64 år).</p>
+          <p>En kvot på 77 innebär att på 100 personer i arbetsför ålder
+          finns det 77 som ska försörjas. Ju högre tal, desto tyngre
+          försörjningsbörda.</p>
+          <p>Måttet är rent demografiskt och tar inte hänsyn till
+          sysselsättningsgraden – det speglar bara åldersstrukturen.</p>
+          <p>Försörjningskvoten skiljer sig åt mellan Sveriges 290
+          kommuner beroende på inflyttning, utflyttning, barnafödande och
+          historiska befolkningstrender.</p>
+        </div>
+      </div>
+
+    </div><!-- /diagram-rad -->
     
-    titlar <- c(
-      totalt = "Demografisk försörjningskvot totalt (0–19 + 65+) per 100 i ålder 20–64",
-      aldre  = "Försörjningskvot från äldre (65+) per 100 i ålder 20–64",
-      yngre  = "Försörjningskvot från yngre (0–19) per 100 i ålder 20–64"
-    )
-    
-    p <- ggplot() +
-      
-      # Grå bakgrundslinjer – vanlig geom_line, ej interaktiv
-      geom_line(data = df_bak,
-                aes(x = ar, y = kvotvarde, group = kommun),
-                color = FARG_GRA, linewidth = 0.25, alpha = 0.6, na.rm = TRUE) +
-      
-      # Sverige: vanlig geom_line (syns) + osynliga interaktiva punkter (hover)
-      {if (input$visa_sverige && nrow(df_sve_matt()) > 0) {
-        df_sve <- df_sve_matt() |>
-          mutate(tooltip = paste0("Sverige\n", ar, ": ", fmt(kvotvarde)))
-        val_sve <- df_sve |> filter(ar == senaste_ar) |> pull(kvotvarde)
-        list(
-          geom_line(data = df_sve, aes(x = ar, y = kvotvarde),
-                    color = FARG_GUL, linewidth = 1.6, na.rm = TRUE),
-          geom_point_interactive(data = df_sve,
-                                 aes(x = ar, y = kvotvarde, tooltip = tooltip, data_id = "sverige"),
-                                 fill = FARG_GUL, color = "white", shape = 21,
-                                 size = 2.5, stroke = 1.0, na.rm = TRUE),
-          annotate("text", x = senaste_ar + 0.5, y = val_sve,
-                   label = "Sverige", color = FARG_GUL, hjust = 0, size = 3.5, fontface = "bold")
-        )
-      }} +
-      
-      # Kommun 2: vanlig geom_line + interaktiva punkter
-      {if (k2 != "-") {
-        df_k2 <- df |> filter(kommun == k2) |>
-          mutate(tooltip = paste0(namn_k2, "\n", ar, ": ", fmt(kvotvarde)))
-        val_k2 <- df_k2 |> filter(ar == senaste_ar) |> pull(kvotvarde)
-        list(
-          geom_line(data = df_k2, aes(x = ar, y = kvotvarde),
-                    color = FARG_ROSA, linewidth = 1.8, na.rm = TRUE),
-          geom_point_interactive(data = df_k2,
-                                 aes(x = ar, y = kvotvarde, tooltip = tooltip, data_id = "k2"),
-                                 fill = FARG_ROSA, color = "white", shape = 21,
-                                 size = 2.5, stroke = 1.0, na.rm = TRUE),
-          annotate("text", x = senaste_ar + 0.5, y = val_k2,
-                   label = namn_k2, color = FARG_ROSA, hjust = 0, size = 3.5, fontface = "bold")
-        )
-      }} +
-      
-      # Kommun 1: vanlig geom_line + interaktiva punkter
-      geom_line(data = df_k1, aes(x = ar, y = kvotvarde),
-                color = FARG_BLA, linewidth = 1.8, na.rm = TRUE) +
-      geom_point_interactive(data = df_k1,
-                             aes(x = ar, y = kvotvarde, tooltip = tooltip, data_id = "k1"),
-                             fill = FARG_BLA, color = "white", shape = 21,
-                             size = 2.5, stroke = 1.0, na.rm = TRUE) +
-      annotate("text", x = senaste_ar + 0.5, y = val_k1,
-               label = namn_k1, color = FARG_BLA, hjust = 0, size = 3.5, fontface = "bold") +
-      
-      scale_x_continuous(breaks = seq(2000, 2025, by = 5),
-                         limits = c(1999.5, 2030), expand = c(0, 0)) +
-      scale_y_continuous(breaks = seq(20, 130, by = 10),
-                         labels = scales::number_format(accuracy = 1)) +
-      
-      labs(title = titlar[input$matt],
-           subtitle = "Grå linjer = alla kommuner  |  Hover för värden på färgade linjer",
-           x = NULL, y = NULL, caption = "Källa: SCB Statistikdatabasen") +
-      
-      theme_minimal(base_size = 12) +
-      theme(
-        plot.title         = element_text(size = 12, face = "bold", margin = margin(b = 4)),
-        plot.subtitle      = element_text(size = 9, color = AXEL_FARG, margin = margin(b = 8)),
-        plot.caption       = element_text(size = 8, color = AXEL_FARG, hjust = 0),
-        axis.text          = element_text(size = 11, color = AXEL_FARG),
-        axis.ticks         = element_blank(),
-        axis.title.y       = element_blank(),
-        panel.grid.major.y = element_line(color = GRID_FARG, linewidth = 0.4),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor   = element_blank(),
-        panel.background   = element_rect(fill = "white", color = NA),
-        plot.background    = element_rect(fill = "white", color = NA),
-        plot.margin        = margin(t = 8, r = 8, b = 8, l = 0)
-      )
-    
-    girafe(ggobj = p, width_svg = 7.5, height_svg = 5,
-           options = list(
-             opts_hover(css = "stroke-width:3px;opacity:1;"),
-             opts_tooltip(
-               css = paste0("background-color:#1a3a5c;color:white;",
-                            "padding:8px 12px;border-radius:6px;",
-                            "font-size:13px;font-family:sans-serif;"),
-               opacity = 0.95, offx = 12, offy = 12),
-             opts_sizing(rescale = TRUE),
-             opts_toolbar(saveaspng = TRUE, position = "topright",
-                          hidden = c("lasso_select", "lasso_deselect"))
-           )
-    )
-  })
-  
-  output$tabell_ui <- renderUI({
-    req(input$visa_tabell)
-    df         <- df_matt()
-    senaste_ar <- max(df$ar, na.rm = TRUE)
-    df_senaste <- df |>
-      filter(ar == senaste_ar, !is.na(kvotvarde)) |>
-      mutate(namn = sub("^\\d{4} ", "", kommun)) |>
-      arrange(desc(kvotvarde))
-    topp5   <- df_senaste |> slice_head(n = 5) |> select(Kommun = namn, Kvot = kvotvarde)
-    botten5 <- df_senaste |> slice_tail(n = 5) |> select(Kommun = namn, Kvot = kvotvarde)
-    tabellrad <- function(df) {
-      rows <- apply(df, 1, function(r) {
-        tags$tr(tags$td(r["Kommun"]),
-                tags$td(style = "text-align:right;", fmt(as.numeric(r["Kvot"]))))
+    <div class="kalla-text">Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad </div>
+
+    <!-- Tabeller -->
+    <div id="tabell-sektion" class="tabell-sektion">
+      <!-- Topp/botten 5 -->
+      <div id="toppbotten-wrapper" class="toppbotten-wrapper">
+        <div>
+          <div class="tabell-rubrik" id="rubrik-topp">↑ Högst försörjningskvot 2025</div>
+          <table id="tabell-topp" class="data-tabell">
+            <thead><tr><th>Kommun</th><th id="th-kvot-1">Kvot 2025</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="tabell-rubrik" id="rubrik-botten">↓ Lägst försörjningskvot 2025</div>
+          <table id="tabell-botten" class="data-tabell">
+            <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Göteborgsregionen -->
+      <div id="gr-wrapper" style="display:none;">
+        <div class="tabell-rubrik" id="rubrik-gr">Göteborgsregionens kommuner 2025</div>
+        <table id="tabell-gr" class="data-tabell">
+          <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <!-- 10 största kommunerna -->
+      <div id="storsta-wrapper" style="display:none;">
+        <div class="tabell-rubrik" id="rubrik-storsta">10 största kommunerna 2025</div>
+        <table id="tabell-storsta" class="data-tabell">
+          <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main><!-- /HUVUDPANEL -->
+
+</div><!-- /app-wrapper -->
+
+<!-- =========================================================================
+     SIDFOT – inspirerad av goteborg.se
+     ========================================================================= -->
+<footer class="gbg-footer">
+
+  <!-- Övre del: kontakt och länkar -->
+  <div class="gbg-footer-ovre">
+    <div class="gbg-footer-kolumn">
+      <h3 class="gbg-footer-rubrik">Kontakta oss</h3>
+      <a href="mailto:statistisk.analys@stadshuset.goteborg.se" class="gbg-footer-lank">
+        statistisk.analys@stadshuset.goteborg.se
+      </a>
+    </div>
+    <div class="gbg-footer-kolumn">
+      <h3 class="gbg-footer-rubrik">Ytterligare information</h3>
+      <a href="https://www.goteborg.se/statistik" target="_blank" class="gbg-footer-lank">
+        goteborg.se/statistik
+      </a>
+      <a href="https://statistikdatabas.goteborg.se" target="_blank" class="gbg-footer-lank">
+        statistikdatabas.goteborg.se
+      </a>
+    </div>
+  </div>
+
+  <!-- Nedre del: mörkare, disclaimer -->
+  <div class="gbg-footer-nedre">
+    <p class="gbg-footer-disclaimer">
+      Den här webbapplikationen är ett arbetsmaterial som tagits fram för internt bruk inom
+      stadsledningskontoret, Göteborgs Stad. Applikationen är publicerad via GitHub Pages och
+      ingår inte i Göteborgs Stads officiella webbplats goteborg.se.
+    </p>
+  </div>
+
+</footer>
+
+
+<!-- =========================================================================
+     JAVASCRIPT
+     ========================================================================= -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+// =============================================================================
+// 1. KONSTANTER OCH KONFIGURATION
+// =============================================================================
+
+// Göteborgs grafiska profil
+const FARG_GRA     = "rgba(180,180,180,0.4)";
+const FARG_GRA_MRK = "rgba(80,80,80,0.7)";   // Mörkare grå för min/max-linjer
+const FARG_BLA     = "#0076bc";
+const FARG_ROSA    = "#e8457a";
+const FARG_GUL     = "#f0a800";
+const FARG_MRK     = "#1a3a5c";
+
+// Göteborgsregionens 13 kommuner (GR) – kommunnamn som delsträngar
+// Matchas mot kommunlistan från data via includes() nedan
+const GR_NAMN = [
+  "Ale", "Alingsås", "Göteborg", "Härryda", "Kungsbacka",
+  "Kungälv", "Lerum", "Lilla Edet", "Mölndal", "Partille",
+  "Stenungsund", "Tjörn", "Öckerö"
+];
+
+// De 10 folkrikaste kommunerna i Sverige
+const STORSTA_10_NAMN = [
+  "Stockholm", "Göteborg", "Malmö", "Uppsala", "Linköping",
+  "Västerås", "Örebro", "Helsingborg", "Jönköping", "Norrköping"
+];
+
+// Bygg GR_SET som fullständiga kommunnamn från data (t.ex. "1480 Göteborg")
+// Görs efter att data laddats – se initialisering längst ner
+let GR_SET = [];
+
+// Titlar per mått
+const TITLAR = {
+  totalt: "Demografisk försörjningskvot (0–19 + 65+) per 100 i åldrarna 20–64 år",
+  aldre:  "Försörjningskvot från äldre (65+) per 100 i åldrarna 20–64 år",
+  yngre:  "Försörjningskvot från yngre (0–19) per 100 i ålder 20–64 år"
+};
+
+
+// =============================================================================
+// 2. HJÄLPFUNKTIONER
+// =============================================================================
+
+// Formatera tal: 1 decimal med komma (svensk standard)
+const fmt = v => (v == null || isNaN(v)) ? "–"
+  : v.toFixed(1).replace(".", ",");
+
+// Ta bort kommunkod (t.ex. "1480 Göteborg" → "Göteborg")
+const rensaNamn = n => n ? n.replace(/^\d{4} /, "") : "";
+
+// Hämta regiondata för ett mått – söker i kommuner och läns
+const hamtaKommun = (mattData, namn) =>
+  mattData.kommuner.find(k => k.namn === namn) ||
+  (mattData.lan ? mattData.lan.find(k => k.namn === namn) : null);
+
+
+// =============================================================================
+// 3. DATAINLÄSNING
+// =============================================================================
+
+// Data injicerades av R som en dold JSON-tagg
+// Data injicerades av R – läses från dold JSON-tagg
+const data        = JSON.parse(document.getElementById("app-data").textContent);
+const ar          = data.ar;
+const ar_labels   = ar.map(String);
+const sista_idx   = ar.length - 1;          // index för senaste statistikår
+const senaste_ar  = data.senaste_ar;         // senaste år, t.ex. 2025
+const kommuner    = data.totalt.kommuner.map(k => k.namn);
+const lan         = data.totalt.lan ? data.totalt.lan.map(k => k.namn) : [];
+
+// Kommuner sorterade i bokstavsordning
+const kom_sort    = [...kommuner].sort((a,b) => a.localeCompare(b,"sv"));
+// Länen sorterade i bokstavsordning – visas sist i dropdown
+const lan_sort    = [...lan].sort((a,b) => a.localeCompare(b,"sv"));
+
+
+// =============================================================================
+// 4. DROPDOWN MED SÖKFUNKTION
+// =============================================================================
+
+// Fyll en dropdown med kommunnamn följt av länen (som optgroup)
+function fyllDropdown(elId, defaultNamn, inkluderaTomt) {
+  const el = document.getElementById(elId);
+  el.innerHTML = "";
+  if (inkluderaTomt) {
+    const opt = document.createElement("option");
+    opt.value = ""; opt.textContent = "–";
+    el.appendChild(opt);
+  }
+  // Kommuner
+  kom_sort.forEach(namn => {
+    const opt       = document.createElement("option");
+    opt.value       = namn;
+    opt.textContent = namn;   // Namn utan kommunkod (redan rensat i R)
+    if (namn === defaultNamn) opt.selected = true;
+    el.appendChild(opt);
+  });
+  // Länen som separat grupp längst ner
+  if (lan_sort.length > 0) {
+    const grupp = document.createElement("optgroup");
+    grupp.label = "── Län ──";
+    lan_sort.forEach(namn => {
+      const opt       = document.createElement("option");
+      opt.value       = namn;
+      opt.textContent = namn;
+      if (namn === defaultNamn) opt.selected = true;
+      grupp.appendChild(opt);
+    });
+    el.appendChild(grupp);
+  }
+}
+
+// Filtrera dropdown baserat på söktext – Safari-kompatibel version.
+// Safari ignorerar style.display på <option>-element, så vi återskapar
+// listan vid varje tangenttryckning istället för att dölja alternativ.
+function koppladSok(sokId, selectId) {
+  const sokEl    = document.getElementById(sokId);
+  const selectEl = document.getElementById(selectId);
+  const inkluderaTomt = selectId === "select-k2";
+
+  sokEl.addEventListener("input", () => {
+    const text        = sokEl.value.toLowerCase().trim();
+    const nuvarandeVal = selectEl.value;
+
+    // Rensa och återbygg listan med matchande alternativ
+    selectEl.innerHTML = "";
+
+    if (inkluderaTomt) {
+      const opt       = document.createElement("option");
+      opt.value       = "";
+      opt.textContent = "–";
+      selectEl.appendChild(opt);
+    }
+
+    // Sök i kommuner och läns (alla regioner)
+    const alla_regioner = [...kom_sort, ...lan_sort];
+    const matchande = alla_regioner.filter(namn =>
+      namn.toLowerCase().includes(text)
+    );
+
+    matchande.forEach(namn => {
+      const opt       = document.createElement("option");
+      opt.value       = namn;
+      opt.textContent = rensaNamn(namn);
+      if (namn === nuvarandeVal) opt.selected = true;
+      selectEl.appendChild(opt);
+    });
+  });
+}
+
+// Initiera dropdowns
+const gbg = kommuner.find(k => k === "Göteborg") || kommuner[0];
+fyllDropdown("select-k1", gbg,  false);
+fyllDropdown("select-k2", "",   true);
+koppladSok("search-k1", "select-k1");
+koppladSok("search-k2", "select-k2");
+
+// Bygg GR_SET: matcha kommunnamn mot GR_NAMN-listan
+// Kommunnamnen har inga koder nu – matcha direkt
+GR_SET = kommuner.filter(k => GR_NAMN.some(gr => k === gr));
+
+// Bygg STORSTA_SET: de 10 folkrikaste kommunerna som finns i data
+const STORSTA_SET = kommuner.filter(k => STORSTA_10_NAMN.some(n => k === n));
+
+
+// =============================================================================
+// 5. DIAGRAM
+// =============================================================================
+
+let chart = null;
+
+// Skapa ett Chart.js-dataset för en färgad linje (k1, k2, Sverige, min, max)
+function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
+  return {
+    label,
+    data: varden,
+    borderColor: farg,
+    backgroundColor: farg,
+    pointBackgroundColor: farg,
+    pointBorderColor: "white",
+    pointBorderWidth: tjock ? 2 : 1.5,
+    pointRadius:      tjock ? 4 : 3,
+    pointHoverRadius: tjock ? 7 : 6,
+    borderWidth:      tjock ? 2.5 : 1.8,
+    borderDash:       streckad ? [6, 3] : [],
+    tension: 0,
+    order
+  };
+}
+
+// Beräkna min/max per år över alla kommuner
+function beraknaMinMax(mattData) {
+  const n = ar.length;
+  const minVarden = new Array(n).fill(Infinity);
+  const maxVarden = new Array(n).fill(-Infinity);
+  mattData.kommuner.forEach(k => {
+    k.varden.forEach((v, i) => {
+      if (v != null) {
+        if (v < minVarden[i]) minVarden[i] = v;
+        if (v > maxVarden[i]) maxVarden[i] = v;
+      }
+    });
+  });
+  return {
+    min: minVarden.map(v => v === Infinity  ? null : v),
+    max: maxVarden.map(v => v === -Infinity ? null : v)
+  };
+}
+
+// Uppdatera förklaringsrutan (legend) under diagrammet
+function uppdateraLegend(k1, k2, visSve, visMinMax) {
+  const legendEl = document.getElementById("legend-rad");
+  const poster   = [];
+
+  if (k1)      poster.push({ farg: FARG_BLA,     label: rensaNamn(k1) });
+  if (k2)      poster.push({ farg: FARG_ROSA,    label: rensaNamn(k2) });
+  if (visSve)  poster.push({ farg: FARG_GUL,     label: "Sverige" });
+  if (visMinMax) {
+    poster.push({ farg: FARG_GRA_MRK, label: "Lägsta kommun" });
+    poster.push({ farg: FARG_GRA_MRK, label: "Högsta kommun" });
+  }
+
+  legendEl.innerHTML = poster.map(p =>
+    `<span class="legend-post">
+       <span class="legend-farg" style="background:${p.farg};"></span>
+       <span class="legend-text">${p.label}</span>
+     </span>`
+  ).join("");
+}
+
+// Huvudfunktion: uppdatera diagram baserat på aktuella val
+function uppdateraDiagram() {
+  const matt     = document.querySelector("input[name='matt']:checked").value;
+  const k1       = document.getElementById("select-k1").value;
+  const k2       = document.getElementById("select-k2").value;
+  const visSve   = document.getElementById("check-sverige").checked;
+  const visMinMax = document.getElementById("check-minmax").checked;
+  const mData    = data[matt];
+  const dsets    = [];
+
+  // --- Grå bakgrundslinjer: alla kommuner ---
+  mData.kommuner.forEach(k => {
+    if (k.namn === k1 || k.namn === k2) return;
+    dsets.push({
+      label:            rensaNamn(k.namn),
+      data:             k.varden,
+      borderColor:      FARG_GRA,
+      backgroundColor:  "transparent",
+      pointRadius:      0,
+      pointHoverRadius: 0,
+      borderWidth:      0.35,
+      tension:          0,
+      order:            20    // Lägst prioritet – ritas bakerst
+    });
+  });
+
+  // --- Min/max-linjer (mörkare grå, streckade) ---
+  if (visMinMax) {
+    const { min, max } = beraknaMinMax(mData);
+    dsets.push(skapaDs("Lägsta kommun", min, FARG_GRA_MRK, 8, false, true));
+    dsets.push(skapaDs("Högsta kommun", max, FARG_GRA_MRK, 8, false, true));
+  }
+
+  // --- Sverige (gul) ---
+  if (visSve && mData.sverige) {
+    dsets.push(skapaDs("Sverige", mData.sverige, FARG_GUL, 3, true));
+  }
+
+  // --- Kommun 2 (rosa) – bara om kryssrutan "Visa" är ikryssad ---
+  const k2aktiv = document.getElementById("check-k2-aktiv").checked;
+  if (k2 && k2aktiv) {
+    const k = hamtaKommun(mData, k2);
+    if (k) dsets.push(skapaDs(rensaNamn(k2), k.varden, FARG_ROSA, 2, true));
+  }
+
+  // --- Kommun 1 (blå) – bara om kryssrutan "Visa" är ikryssad ---
+  const k1aktiv = document.getElementById("check-k1-aktiv").checked;
+  if (k1 && k1aktiv) {
+    const k = hamtaKommun(mData, k1);
+    if (k) dsets.push(skapaDs(rensaNamn(k1), k.varden, FARG_BLA, 1, true));
+  }
+
+  // --- Rendera diagram ---
+  if (chart) chart.destroy();
+  chart = new Chart(
+    document.getElementById("huvuddiagram").getContext("2d"),
+    {
+      type: "line",
+      data: { labels: ar_labels, datasets: dsets },
+      options: {
+        responsive:          true,
+        maintainAspectRatio: false,
+        animation:           { duration: 150 },
+        plugins: {
+          title: {
+            display:  true,
+            text:     TITLAR[matt],
+            font:     { size: 16, weight: "bold" },
+            color:    "#1a1a1a",
+            align:    "start",
+            padding:  { bottom: 4 }
+          },
+          subtitle: {
+            display: true,
+            text:    "Grå linjer = alla kommuner",
+            font:    { size: 12, style: "italic" },
+            color:   "#666",
+            align:   "start",
+            padding: { bottom: 14 }
+          },
+          // Dölj den inbyggda legenden – vi har vår egen
+          legend: { display: false },
+          tooltip: {
+            mode:        "index",
+            intersect:   false,
+            // Visa bara de färgade linjerna (order < 10) i tooltip
+            filter:      item => item.dataset.order < 10,
+            backgroundColor: FARG_MRK,
+            titleColor:  "white",
+            bodyColor:   "white",
+            padding:     12,
+            callbacks: {
+              title: items => "År " + items[0].label,
+              label: item  => "  " + item.dataset.label + ": " + fmt(item.raw)
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color:       "#555",
+              font:        { size: 13 },
+              maxRotation: 0,
+              // Visa år som är delbara med 5 (2000, 2005, 2010...)
+              callback:    (v, i) => parseInt(ar_labels[i]) % 5 === 0 ? ar_labels[i] : ""
+            },
+            grid: { color: "#f0f0f0" }
+          },
+          y: {
+            position: "right",
+            ticks: {
+              color:    "#555",
+              font:     { size: 13 },
+              callback: v => v.toFixed(0)
+            },
+            grid: { color: "#f0f0f0" }
+          }
+        },
+        interaction: { mode: "index", intersect: false }
+      }
+    }
+  );
+
+  // Uppdatera legend och tabeller
+  uppdateraLegend(
+    k1aktiv ? k1 : null,
+    k2aktiv ? k2 : null,
+    visSve, visMinMax
+  );
+  uppdateraTabeller(matt);
+}
+
+
+// =============================================================================
+// 6. TABELLER
+// =============================================================================
+
+// Hjälp: fyll en tabell med rader
+function fyllTabell(id, rader) {
+  document.querySelector("#" + id + " tbody").innerHTML =
+    rader.map(r =>
+      `<tr><td>${r.namn}</td><td class="td-tal">${fmt(r.kvot)}</td></tr>`
+    ).join("");
+}
+
+// Uppdatera alla tabeller baserat på aktuellt mått
+function uppdateraTabeller(matt) {
+  const mData      = data[matt];
+  const visTb      = document.getElementById("check-tabell").checked;
+  const visGR      = document.getElementById("check-gr").checked;
+  const tbWrapper  = document.getElementById("toppbotten-wrapper");
+  const grWrapper  = document.getElementById("gr-wrapper");
+  const sektionen  = document.getElementById("tabell-sektion");
+
+  const visStorsta = document.getElementById("check-storsta").checked;
+  const stWrapper  = document.getElementById("storsta-wrapper");
+
+  // Visa/dölj hela tabellsektionen om inget ska visas
+  sektionen.style.display = (visTb || visGR || visStorsta) ? "block" : "none";
+
+  // --- Topp/botten 5 ---
+  tbWrapper.style.display = visTb ? "flex" : "none";
+  if (visTb) {
+    const lista = mData.kommuner
+      .map(k => ({ namn: rensaNamn(k.namn), kvot: k.varden[sista_idx] }))
+      .filter(k => k.kvot != null)
+      .sort((a,b) => b.kvot - a.kvot);
+    fyllTabell("tabell-topp",   lista.slice(0, 5));
+    fyllTabell("tabell-botten", lista.slice(-5).reverse());
+  }
+
+  // --- Göteborgsregionen ---
+  grWrapper.style.display = visGR ? "block" : "none";
+  if (visGR) {
+    const grData = GR_SET
+      .map(kod => {
+        const k = hamtaKommun(mData, kod);
+        return k
+          ? { namn: rensaNamn(kod), kvot: k.varden[sista_idx] }
+          : null;
       })
-      tags$table(tags$thead(tags$tr(tags$th("Kommun"), tags$th("Kvot 2025"))),
-                 tags$tbody(rows))
-    }
-    div(style = "display:flex; gap:40px; margin-top:16px;",
-        div(div(class = "tabell-rubrik", "↑ Högst försörjningskvot 2025"), tabellrad(topp5)),
-        div(div(class = "tabell-rubrik", "↓ Lägst försörjningskvot 2025"), tabellrad(botten5))
-    )
-  })
+      .filter(Boolean)
+      .filter(k => k.kvot != null)
+      .sort((a,b) => b.kvot - a.kvot);
+    fyllTabell("tabell-gr", grData);
+  }
+
+  // --- 10 största kommunerna ---
+  stWrapper.style.display = visStorsta ? "block" : "none";
+  if (visStorsta) {
+    const stData = STORSTA_SET
+      .map(kod => {
+        const k = hamtaKommun(mData, kod);
+        return k
+          ? { namn: rensaNamn(kod), kvot: k.varden[sista_idx] }
+          : null;
+      })
+      .filter(Boolean)
+      .filter(k => k.kvot != null)
+      .sort((a,b) => b.kvot - a.kvot);
+    fyllTabell("tabell-storsta", stData);
+  }
 }
 
-shinyApp(ui, server)
+
+// =============================================================================
+// 7. EXPORTFUNKTIONER
+// =============================================================================
+
+// Kopiera diagrammet som PNG till urklipp (eller ladda ner om ej stöds).
+// Legenden ritas in på en tillfällig offscreen-canvas så den syns i bilden.
+async function kopieraDiagram() {
+  if (!chart) return;
+
+  const srcCanvas = document.getElementById("huvuddiagram");
+  const w = srcCanvas.width;
+  const h = srcCanvas.height;
+
+  // Hämta färgade linjer för legend
+  const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
+  const legendH = synliga.length > 0 ? 48 : 0;
+
+  // Skapa ny canvas med extra höjd för legend
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width  = w;
+  exportCanvas.height = h + legendH;
+  const ctx = exportCanvas.getContext("2d");
+
+  // Vit bakgrund
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+  // Kopiera diagrammet
+  ctx.drawImage(srcCanvas, 0, 0);
+
+  // Rita legend under diagrammet
+  if (synliga.length > 0) {
+    ctx.font = "bold 18px 'Open Sans', sans-serif";
+    let x = 20;
+    const y = h + 16;
+    synliga.forEach(ds => {
+      // Färgad linje
+      ctx.strokeStyle = ds.borderColor;
+      ctx.lineWidth   = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 6);
+      ctx.lineTo(x + 26, y + 6);
+      ctx.stroke();
+      // Punkt
+      ctx.fillStyle = ds.borderColor;
+      ctx.beginPath();
+      ctx.arc(x + 13, y + 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+      x += 32;
+      // Etikett
+      ctx.fillStyle = "#1a1a1a";
+      ctx.fillText(ds.label, x, y + 10);
+      x += ctx.measureText(ds.label).width + 28;
+    });
+  }
+
+  exportCanvas.toBlob(async blob => {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob })
+      ]);
+      alert("✓ Diagram kopierat till urklipp!\nKlistra in i Word/PowerPoint (Ctrl+V).");
+    } catch {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement("a");
+      a.href    = url;
+      a.download = "forsorjningskvot.png";
+      a.click();
+      URL.revokeObjectURL(url);
+      alert("✓ Diagram nedladdat som PNG.");
+    }
+  });
+}
+
+// Kopiera diagrammets data som TSV (klistrar in i Excel)
+function kopieraSiffror() {
+  if (!chart) return;
+
+  // Hämta bara de färgade dataseten (order < 10)
+  const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
+  if (!synliga.length) { alert("Inga valda linjer att kopiera."); return; }
+
+  const rubrik = ["År", ...synliga.map(ds => ds.label)].join("\t");
+  const rader  = ar_labels.map((ar, i) => {
+    const varden = synliga.map(ds => {
+      const v = ds.data[i];
+      return (v == null || isNaN(v)) ? "" : v.toFixed(1).replace(".", ",");
+    });
+    return [ar, ...varden].join("\t");
+  });
+
+  navigator.clipboard.writeText([rubrik, ...rader].join("\n"))
+    .then(()  => alert("✓ Data kopierad!\nKlistra in i Excel (Ctrl+V)."))
+    .catch(()  => alert("Kopiering misslyckades – prova en annan webbläsare."));
+}
+
+
+// =============================================================================
+// 8. FÄLLBAR INFORUTA
+// =============================================================================
+
+function vaxlaTextbox() {
+  const innehall = document.getElementById("textbox-innehall");
+  const knapp    = document.getElementById("textbox-toggle");
+  const dold     = innehall.style.display === "none";
+  innehall.style.display = dold ? "block" : "none";
+  knapp.textContent      = dold ? "▲" : "▼";
+}
+
+
+// =============================================================================
+// 9. HÄNDELSELYSSNARE
+// =============================================================================
+
+// Måttknappar
+document.querySelectorAll("input[name='matt']")
+  .forEach(el => el.addEventListener("change", uppdateraDiagram));
+
+// Kommunval
+["select-k1", "select-k2"].forEach(id =>
+  document.getElementById(id).addEventListener("change", uppdateraDiagram));
+
+// Aktiv/inaktiv-kryssrutor för kommuner
+["check-k1-aktiv", "check-k2-aktiv"].forEach(id =>
+  document.getElementById(id).addEventListener("change", uppdateraDiagram));
+
+// Övriga kryssrutor
+["check-sverige", "check-minmax", "check-tabell", "check-gr", "check-storsta"].forEach(id =>
+  document.getElementById(id).addEventListener("change", uppdateraDiagram));
+
+
+// =============================================================================
+// 10. INITIALISERA
+// =============================================================================
+
+// Uppdatera dynamiska årsrubriker baserat på data
+const arText = String(senaste_ar);
+["rubrik-topp", "rubrik-botten", "rubrik-gr", "rubrik-storsta"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.textContent = el.textContent.replace("2025", arText);
+});
+document.querySelectorAll("th").forEach(th => {
+  if (th.textContent.includes("Kvot 2025")) {
+    th.textContent = th.textContent.replace("2025", arText);
+  }
+});
+
+uppdateraDiagram();
+</script>
 ```

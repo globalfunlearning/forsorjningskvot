@@ -2,13 +2,10 @@ project:
   type: website
   output-dir: docs
 
+# Ingen Quarto-navbar – vi bygger vår egen enligt Göteborgs grafiska profil
 website:
-  title: "Demografisk försörjningskvot"
-  description: "Interaktiv app för demografisk försörjningskvot i Sveriges kommuner"
-  navbar:
-    background: "#0076bc"
-    foreground: "white"
-    title: "Demografisk försörjningskvot – Sveriges kommuner"
+  title: "Demografisk försörjningskvot – Göteborgs Stad"
+  description: "Interaktiv app – demografisk försörjningskvot i Sveriges kommuner"
 
 format:
   html:
