@@ -4907,8 +4907,13 @@ let chart = null;
 // Sätts i uppdateraDiagram() och läses av tooltip label-callback.
 let minMaxNamn = { min: [], max: [] };
 
-// Bygg ett Chart.js-dataset för en historisk linje
+// Hjälp: avgör om vi är på en smal skärm (mobil)
+const arMobil = () => window.innerWidth < 600;
+
+// Bygg ett Chart.js-dataset för en historisk linje.
+// Punktstorlekar skalas ner på mobil för att undvika plottrigt utseende.
 function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
+  const mobil = arMobil();
   return {
     label,
     data:             varden,
@@ -4916,10 +4921,10 @@ function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
     backgroundColor:  farg,
     pointBackgroundColor: farg,
     pointBorderColor: "white",
-    pointBorderWidth: tjock ? 2 : 1.5,
-    pointRadius:      tjock ? 4 : 3,
-    pointHoverRadius: tjock ? 7 : 6,
-    borderWidth:      tjock ? 2.5 : 1.8,
+    pointBorderWidth: tjock ? (mobil ? 1.5 : 2) : 1,
+    pointRadius:      tjock ? (mobil ? 2   : 4) : (mobil ? 0 : 3),
+    pointHoverRadius: tjock ? (mobil ? 5   : 7) : (mobil ? 4 : 6),
+    borderWidth:      tjock ? (mobil ? 2   : 2.5) : 1.8,
     borderDash:       streckad ? [6, 3] : [],
     tension:          0,
     order
@@ -4932,6 +4937,7 @@ function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
 function skapaPrognosDs(label, historiskVarden, prognosVarden, farg, order) {
   const skarv   = historiskVarden[historiskVarden.length - 1];
   const nullPad = new Array(historiskVarden.length - 1).fill(null);
+  const mobil   = arMobil();
   return {
     label,
     data:             [...nullPad, skarv, ...prognosVarden],
@@ -4939,10 +4945,10 @@ function skapaPrognosDs(label, historiskVarden, prognosVarden, farg, order) {
     backgroundColor:  farg,
     pointBackgroundColor: farg,
     pointBorderColor: "white",
-    pointBorderWidth: 1.5,
+    pointBorderWidth: 1,
     pointRadius:      0,
-    pointHoverRadius: 5,
-    borderWidth:      3,
+    pointHoverRadius: mobil ? 3 : 5,
+    borderWidth:      mobil ? 2 : 3,
     borderDash:       [8, 4],
     tension:          0,
     order
@@ -5063,7 +5069,7 @@ function uppdateraDiagram() {
       backgroundColor:  "transparent",
       pointRadius:      0,
       pointHoverRadius: 0,
-      borderWidth:      0.35,
+      borderWidth:      arMobil() ? 0.6 : 0.35,
       tension:          0,
       order:            20
     });
@@ -5189,7 +5195,7 @@ function uppdateraDiagram() {
           title: {
             display: true,
             text:    TITLAR[matt],
-            font:    { size: 16, weight: "bold" },
+            font:    { size: arMobil() ? 12 : 16, weight: "bold" },
             color:   "#1a1a1a",
             align:   "start",
             padding: { bottom: 4 }
@@ -5197,12 +5203,14 @@ function uppdateraDiagram() {
           subtitle: {
             display: true,
             text: visPrognos
-              ? "Grå linjer = alla kommuner  •  Streckade linjer = SCB-prognos 2026–2050"
+              ? (arMobil()
+                  ? "Streckade linjer = SCB-prognos 2026–2050"
+                  : "Grå linjer = alla kommuner  •  Streckade linjer = SCB-prognos 2026–2050")
               : "Grå linjer = alla kommuner",
-            font:    { size: 12, style: "italic" },
+            font:    { size: arMobil() ? 10 : 12, style: "italic" },
             color:   "#666",
             align:   "start",
-            padding: { bottom: 14 }
+            padding: { bottom: arMobil() ? 8 : 14 }
           },
           legend: { display: false },
           tooltip: {
