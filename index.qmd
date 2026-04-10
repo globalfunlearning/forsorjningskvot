@@ -493,22 +493,26 @@ function beraknaMinMax(mattData) {
 
 // Beräkna min- och maxvärde per år för alla kommuner (prognosperiod)
 function beraknaProgMinMax(matt) {
-  if (!harPrognos) return { min: [], max: [] };
-  const pData = prognosRaw[matt];
-  const n     = prog_ar.length;
-  const minV  = new Array(n).fill(Infinity);
-  const maxV  = new Array(n).fill(-Infinity);
+  if (!harPrognos) return { min: [], max: [], minNamn: [], maxNamn: [] };
+  const pData   = prognosRaw[matt];
+  const n       = prog_ar.length;
+  const minV    = new Array(n).fill(Infinity);
+  const maxV    = new Array(n).fill(-Infinity);
+  const minNamn = new Array(n).fill("");
+  const maxNamn = new Array(n).fill("");
   pData.kommuner.forEach(k => {
     k.varden.forEach((v, i) => {
       if (v != null) {
-        if (v < minV[i]) minV[i] = v;
-        if (v > maxV[i]) maxV[i] = v;
+        if (v < minV[i]) { minV[i] = v; minNamn[i] = rensaNamn(k.namn); }
+        if (v > maxV[i]) { maxV[i] = v; maxNamn[i] = rensaNamn(k.namn); }
       }
     });
   });
   return {
     min: minV.map(v => v === Infinity  ? null : v),
-    max: maxV.map(v => v === -Infinity ? null : v)
+    max: maxV.map(v => v === -Infinity ? null : v),
+    minNamn,
+    maxNamn
   };
 }
 
@@ -590,12 +594,11 @@ function uppdateraDiagram() {
     const { min, max, minNamn, maxNamn } = beraknaMinMax(mData);
     let minData, maxData;
     if (visPrognos) {
-      const { min: pMin, max: pMax } = beraknaProgMinMax(matt);
+      const { min: pMin, max: pMax, minNamn: pMinNamn, maxNamn: pMaxNamn } = beraknaProgMinMax(matt);
       minData = [...min, ...pMin];
       maxData = [...max, ...pMax];
-      // Fyll ut prognosår med tomma strängar (prognosnamnen beräknas inte)
-      minMaxNamn.min = [...minNamn, ...new Array(pMin.length).fill("")];
-      minMaxNamn.max = [...maxNamn, ...new Array(pMax.length).fill("")];
+      minMaxNamn.min = [...minNamn, ...pMinNamn];
+      minMaxNamn.max = [...maxNamn, ...pMaxNamn];
     } else {
       minData = min;
       maxData = max;
@@ -727,9 +730,10 @@ function uppdateraDiagram() {
             filter: (item) => {
               // Dölj grå bakgrundslinjer (order 20) i tooltip
               if (item.dataset.order >= 10) return false;
-              // Dölj prognoslinjer för historiska år (visas bara från forsta_ar)
-              if (visPrognos && harPrognos && item.dataset.borderDash &&
-                  item.dataset.borderDash.length > 0) {
+              // Dölj SCB-prognoslinjer för historiska år – identifieras via order < 8
+              // (min/max har order 8 och ska visas även för historiska år)
+              if (visPrognos && harPrognos && item.dataset.order < 8 &&
+                  item.dataset.borderDash && item.dataset.borderDash.length > 0) {
                 if (parseInt(labels[item.dataIndex]) < prognosRaw.forsta_ar) return false;
               }
               return true;
