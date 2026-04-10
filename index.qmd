@@ -16,11 +16,8 @@ execute:
 #| label: inject-data
 #| output: asis
 
-# =============================================================================
-# DATAINJICERING
-# Läser JSON-filerna som genererats av hamta_data.R och hamta_prognos.R
-# och bäddar in direkt i HTML-sidan.
-# =============================================================================
+# Läser JSON från hamta_data.R och hamta_prognos.R och bäddar in i HTML-sidan.
+# Prognosdata är valfritt – saknas filen injiceras null och appen döljer prognos-valet.
 
 library(jsonlite)
 library(here)
@@ -29,13 +26,12 @@ json_fil    <- here("data", "forsorjningskvot.json")
 prognos_fil <- here("data", "prognos.json")
 
 if (!file.exists(json_fil)) {
-  stop("JSON-filen saknas! Kör hamta_data.R först för att hämta data från SCB.")
+  stop("JSON-filen saknas! Kör hamta_data.R för att hämta data från SCB.")
 }
 
 json_str <- readLines(json_fil, warn = FALSE) |> paste(collapse = "")
 cat(sprintf('<script id="app-data" type="application/json">%s</script>', json_str))
 
-# Prognosdata injiceras om filen finns – annars null
 if (file.exists(prognos_fil)) {
   prognos_str <- readLines(prognos_fil, warn = FALSE) |> paste(collapse = "")
   cat(sprintf('<script id="prognos-data" type="application/json">%s</script>', prognos_str))
@@ -46,9 +42,9 @@ if (file.exists(prognos_fil)) {
 
 ```{=html}
 <!-- =========================================================================
-     GÖTEBORGS STAD – SIDHUVUD
+     SIDHUVUD – Göteborgs grafiska profil
+     Logotyprad (vit) + svart menyrad
      ========================================================================= -->
-
 <header class="gbg-header">
   <div class="gbg-logotyp-rad">
     <img src="gbg_li_rgb.svg" alt="Göteborgs Stad" class="gbg-logotyp">
@@ -61,204 +57,155 @@ if (file.exists(prognos_fil)) {
 <h1 class="app-rubrik">Demografisk försörjningskvot – Sveriges kommuner</h1>
 
 <!-- =========================================================================
-     LAYOUT: SIDEBAR + HUVUDPANEL
+     KONTROLLBAR – tre grupper separerade av vertikala avdelare:
+     1. Måttval (segmentknappar)
+     2. Kommunval (combobox-sök)
+     3. Extraval (checkboxar för Sverige, min/max och prognos)
      ========================================================================= -->
-<div class="app-wrapper">
+<div class="kontrollbar">
 
-  <!-- SIDEBAR ---------------------------------------------------------------->
-  <aside class="sidebar">
+  <div class="kb-grupp">
+    <span class="kb-etikett">Visa</span>
+    <div class="segment-grupp">
+      <button class="segment-knapp aktiv" data-matt="totalt">Totalt</button>
+      <button class="segment-knapp" data-matt="aldre">Från äldre</button>
+      <button class="segment-knapp" data-matt="yngre">Från yngre</button>
+    </div>
+  </div>
 
-    <!-- Måttval -->
-    <div class="sidebar-section">
-      <div class="sidebar-label">Visa försörjningskvot</div>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="matt" value="totalt" checked>
-          <span>Totalt (0–19 + 65+)</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="matt" value="aldre">
-          <span>Från äldre (65+)</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="matt" value="yngre">
-          <span>Från yngre (0–19)</span>
-        </label>
+  <div class="kb-avdelare"></div>
+
+  <div class="kb-grupp">
+    <div class="kb-kommuner">
+      <div class="kb-dropdown-wrap">
+        <div class="kb-dropdown-etikett k1">Kommun 1 (blå)</div>
+        <div class="kb-sok-wrap" id="wrap-k1">
+          <input type="text" id="search-k1" class="kommunsok" placeholder="Sök eller välj..." autocomplete="off">
+          <div id="list-k1" class="kommunlista" style="display:none;"></div>
+        </div>
+      </div>
+      <div class="kb-dropdown-wrap">
+        <div class="kb-dropdown-etikett k2">Kommun 2 (rosa)</div>
+        <div class="kb-sok-wrap" id="wrap-k2">
+          <input type="text" id="search-k2" class="kommunsok" placeholder="Sök eller välj..." autocomplete="off">
+          <div id="list-k2" class="kommunlista" style="display:none;"></div>
+        </div>
       </div>
     </div>
+  </div>
 
-    <hr class="sidebar-divider">
+  <div class="kb-avdelare"></div>
 
-    <!-- Kommunval -->
-    <div class="sidebar-section">
-      <div class="kommunval-header">
-        <div class="sidebar-label k1-label">Kommun 1 (blå)</div>
-        <label class="aktiv-label" title="Visa/dölj kommunen">
-          <input type="checkbox" id="check-k1-aktiv" checked>
-          <span>Visa</span>
-        </label>
-      </div>
-      <input type="text" id="search-k1" class="kommunsok" placeholder="Sök eller välj...">
-      <select id="select-k1" class="kommunval" size="1"></select>
-    </div>
-
-    <div class="sidebar-section" style="margin-top:10px;">
-      <div class="kommunval-header">
-        <div class="sidebar-label k2-label">Kommun 2 (rosa)</div>
-        <label class="aktiv-label" title="Visa/dölj kommunen">
-          <input type="checkbox" id="check-k2-aktiv" checked>
-          <span>Visa</span>
-        </label>
-      </div>
-      <input type="text" id="search-k2" class="kommunsok" placeholder="Sök eller välj...">
-      <select id="select-k2" class="kommunval" size="1"></select>
-    </div>
-
-    <hr class="sidebar-divider">
-
-    <!-- Referenslinjer -->
-    <div class="sidebar-section">
+  <div class="kb-grupp">
+    <div class="kb-checkboxar">
       <label class="checkbox-option">
         <input type="checkbox" id="check-sverige">
-        <span>Visa Sverige (gul)</span>
+        <span>Sverige (gul)</span>
       </label>
-      <label class="checkbox-option" style="margin-top:8px;">
+      <label class="checkbox-option">
         <input type="checkbox" id="check-minmax">
-        <span>Visa linje för min/max</span>
+        <span>Min/max</span>
       </label>
-    </div>
-
-    <hr class="sidebar-divider">
-
-    <!-- Prognos -->
-    <div class="sidebar-section">
-      <div class="sidebar-label">Prognos 2026–2050</div>
+      <!-- Prognos-valet döljs automatiskt om prognos.json saknas -->
       <label class="checkbox-option" id="prognos-option">
         <input type="checkbox" id="check-prognos">
-        <span>Lägg till prognos (SCB)</span>
+        <span>Prognos (SCB)</span>
       </label>
-      <div id="prognos-saknas" style="display:none; font-size:11px; color:#aaa; margin-top:4px;">
-        Kör hamta_prognos.R för att aktivera
-      </div>
+      <span id="prognos-saknas" style="display:none;">Kör hamta_prognos.R för prognos</span>
     </div>
+  </div>
 
-    <hr class="sidebar-divider">
+</div><!-- /kontrollbar -->
 
-    <!-- Tabellval -->
-    <div class="sidebar-section">
-      <div class="sidebar-label">Visa tabell</div>
-      <label class="checkbox-option">
-        <input type="checkbox" id="check-tabell" checked>
-        <span>Topp/botten 5</span>
-      </label>
-      <label class="checkbox-option" style="margin-top:8px;">
-        <input type="checkbox" id="check-gr">
-        <span>Göteborgsregionens kommuner</span>
-      </label>
-      <label class="checkbox-option" style="margin-top:8px;">
-        <input type="checkbox" id="check-storsta">
-        <span>10 största kommunerna</span>
-      </label>
+<!-- =========================================================================
+     DIAGRAM
+     Chart.js renderar i canvas-elementet. Wrappern styr proportionerna via
+     aspect-ratio i CSS – utan fast höjd växer inte canvas okontrollerat.
+     ========================================================================= -->
+<div class="diagram-outer">
+  <div class="diagram-kort">
+    <div class="diagram-wrapper">
+      <canvas id="huvuddiagram"></canvas>
     </div>
+    <!-- Legend byggs dynamiskt av uppdateraLegend() -->
+    <div id="legend-rad" class="legend-rad"></div>
+  </div>
+</div>
 
-    <hr class="sidebar-divider">
+<!-- Källhänvisning och exportknappar på samma rad -->
+<div class="kalla-export-rad">
+  <div class="kalla-text" id="kalla-text">
+    Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad
+  </div>
+  <div class="export-knappar">
+    <button class="export-knapp" onclick="kopieraDiagram()">Kopiera diagram</button>
+    <button class="export-knapp" onclick="kopieraSiffror()">Kopiera siffror</button>
+  </div>
+</div>
 
-    <!-- Exportknappar -->
-    <div class="sidebar-section">
-      <div class="sidebar-label">Exportera</div>
-      <button class="export-knapp" onclick="kopieraDiagram()">
-        📊 Kopiera diagram
-      </button>
-      <button class="export-knapp" onclick="kopieraSiffror()">
-        📋 Kopiera siffror
-      </button>
+<!-- Inforuta – kollapsad som standard, expanderas av användaren -->
+<div class="textbox" id="textbox">
+  <div class="textbox-header" onclick="vaxlaTextbox()">
+    <h3 class="textbox-rubrik">Stor skillnad mellan Sveriges kommuner</h3>
+    <button class="textbox-toggle" id="textbox-toggle">▼ Visa</button>
+  </div>
+  <div class="textbox-innehall dold" id="textbox-innehall">
+    <p>Demografiska försörjningskvoten visar antal personer utanför den arbetsföra
+    befolkningen jämfört med antal personer i arbetsför ålder (20–64 år).
+    En kvot på 77 innebär att på 100 personer i arbetsför ålder finns det 77 som ska försörjas.
+    Försörjningskvoten skiljer sig åt mellan Sveriges 290 kommuner eftersom befolkningens
+    ålderssammansättning ser olika ut beroende på inflyttning, utflyttning, barnafödande, dödlighet
+    och historiska befolkningstrender.</p>
+  </div>
+</div>
+
+<!-- =========================================================================
+     TABELLER
+     Tre tabellvyer väljs med knappar. Innehållet fylls av uppdateraTabeller().
+     ========================================================================= -->
+<div id="tabell-sektion" class="tabell-sektion">
+
+  <div class="tabell-kontroll">
+    <span class="tabell-etikett">Tabell <span id="tabell-ar-etikett">2025</span></span>
+    <button class="tabell-knapp aktiv" data-tabell="toppbotten">Topp/botten 5</button>
+    <button class="tabell-knapp"       data-tabell="gr">Göteborgsregionen</button>
+    <button class="tabell-knapp"       data-tabell="storsta">10 största</button>
+  </div>
+
+  <div id="toppbotten-wrapper" class="toppbotten-wrapper">
+    <div>
+      <div class="tabell-rubrik" id="rubrik-topp">↑ Högst försörjningskvot 2025</div>
+      <table id="tabell-topp" class="data-tabell">
+        <thead><tr><th>Kommun</th><th id="th-kvot-1">Kvot 2025</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
-
-    <hr class="sidebar-divider">
-
-    <div class="sidebar-footer">
-      Håll muspekaren över linjer för att se värden.<br><br>
-      Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad
+    <div>
+      <div class="tabell-rubrik" id="rubrik-botten">↓ Lägst försörjningskvot 2025</div>
+      <table id="tabell-botten" class="data-tabell">
+        <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
+  </div>
 
-  </aside><!-- /SIDEBAR -->
+  <div id="gr-wrapper" style="display:none;">
+    <div class="tabell-rubrik" id="rubrik-gr">Göteborgsregionens kommuner 2025</div>
+    <table id="tabell-gr" class="data-tabell">
+      <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-  <!-- HUVUDPANEL ------------------------------------------------------------->
-  <main class="huvudpanel">
+  <div id="storsta-wrapper" style="display:none;">
+    <div class="tabell-rubrik" id="rubrik-storsta">10 största kommunerna 2025</div>
+    <table id="tabell-storsta" class="data-tabell">
+      <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-    <div class="diagram-rad">
-
-      <div class="diagram-wrapper-outer">
-        <div class="diagram-wrapper">
-          <canvas id="huvuddiagram"></canvas>
-        </div>
-        <div id="legend-rad" class="legend-rad"></div>
-      </div>
-
-      <!-- Fällbar inforuta -->
-      <div class="textbox" id="textbox">
-        <div class="textbox-header" onclick="vaxlaTextbox()">
-          <h3 class="textbox-rubrik">Stor skillnad mellan Sveriges kommuner</h3>
-          <button class="textbox-toggle" id="textbox-toggle" title="Dölj/visa text">▲</button>
-        </div>
-        <div class="textbox-innehall" id="textbox-innehall">
-          <p>Demografiska försörjningskvoten visar antal personer
-          utanför den arbetsföra befolkningen jämfört med antal personer i
-          arbetsför ålder (20–64 år).</p>
-          <p>En kvot på 77 innebär att på 100 personer i arbetsför ålder
-          finns det 77 som ska försörjas. Ju högre tal, desto tyngre
-          försörjningsbörda.</p>
-          <p>Måttet är rent demografiskt och tar inte hänsyn till
-          sysselsättningsgraden – det speglar bara åldersstrukturen.</p>
-          <p>Försörjningskvoten skiljer sig åt mellan Sveriges 290
-          kommuner beroende på inflyttning, utflyttning, barnafödande och
-          historiska befolkningstrender.</p>
-        </div>
-      </div>
-
-    </div><!-- /diagram-rad -->
-
-    <div class="kalla-text" id="kalla-text">
-      Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad
-    </div>
-
-    <!-- Tabeller -->
-    <div id="tabell-sektion" class="tabell-sektion">
-      <div id="toppbotten-wrapper" class="toppbotten-wrapper">
-        <div>
-          <div class="tabell-rubrik" id="rubrik-topp">↑ Högst försörjningskvot 2025</div>
-          <table id="tabell-topp" class="data-tabell">
-            <thead><tr><th>Kommun</th><th id="th-kvot-1">Kvot 2025</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div>
-          <div class="tabell-rubrik" id="rubrik-botten">↓ Lägst försörjningskvot 2025</div>
-          <table id="tabell-botten" class="data-tabell">
-            <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-      <div id="gr-wrapper" style="display:none;">
-        <div class="tabell-rubrik" id="rubrik-gr">Göteborgsregionens kommuner 2025</div>
-        <table id="tabell-gr" class="data-tabell">
-          <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div id="storsta-wrapper" style="display:none;">
-        <div class="tabell-rubrik" id="rubrik-storsta">10 största kommunerna 2025</div>
-        <table id="tabell-storsta" class="data-tabell">
-          <thead><tr><th>Kommun</th><th>Kvot 2025</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-  </main><!-- /HUVUDPANEL -->
-
-</div><!-- /app-wrapper -->
+</div><!-- /tabell-sektion -->
 
 <!-- =========================================================================
      SIDFOT
@@ -298,27 +245,30 @@ if (file.exists(prognos_fil)) {
 
 <script>
 // =============================================================================
-// 1. KONSTANTER OCH KONFIGURATION
+// 1. KONSTANTER
+// Färger enligt Göteborgs grafiska profil.
+// Prognosfärger är halvtransparenta versioner av respektive linjefärg.
 // =============================================================================
 
-const FARG_GRA       = "rgba(180,180,180,0.4)";
-const FARG_GRA_MRK   = "rgba(80,80,80,0.7)";
-const FARG_BLA       = "#0076bc";
-const FARG_ROSA      = "#e8457a";
-const FARG_GUL       = "#f0a800";
-const FARG_MRK       = "#1a3a5c";
+const FARG_GRA       = "rgba(180,180,180,0.4)";   // Grå bakgrundslinjer
+const FARG_GRA_MRK   = "rgba(80,80,80,0.7)";      // Min/max-linjer
+const FARG_BLA       = "#0076bc";                  // Kommun 1
+const FARG_ROSA      = "#e8457a";                  // Kommun 2
+const FARG_GUL       = "#f0a800";                  // Sverige
+const FARG_MRK       = "#1a3a5c";                  // Tooltip-bakgrund
 
-// Prognosfärger: samma kulör som historiska linjer men halvtransparenta
 const FARG_BLA_PROG  = "rgba(0,118,188,0.55)";
 const FARG_ROSA_PROG = "rgba(232,69,122,0.55)";
 const FARG_GUL_PROG  = "rgba(240,168,0,0.55)";
 
+// Göteborgsregionens 13 kommuner – matchas mot kommunlistan från data
 const GR_NAMN = [
   "Ale", "Alingsås", "Göteborg", "Härryda", "Kungsbacka",
   "Kungälv", "Lerum", "Lilla Edet", "Mölndal", "Partille",
   "Stenungsund", "Tjörn", "Öckerö"
 ];
 
+// De 10 folkrikaste kommunerna
 const STORSTA_10_NAMN = [
   "Stockholm", "Göteborg", "Malmö", "Uppsala", "Linköping",
   "Västerås", "Örebro", "Helsingborg", "Jönköping", "Norrköping"
@@ -326,6 +276,7 @@ const STORSTA_10_NAMN = [
 
 let GR_SET = [];
 
+// Diagramtitlar per mått
 const TITLAR = {
   totalt: "Demografisk försörjningskvot (0–19 + 65+) per 100 i åldrarna 20–64 år",
   aldre:  "Försörjningskvot från äldre (65+) per 100 i åldrarna 20–64 år",
@@ -337,109 +288,132 @@ const TITLAR = {
 // 2. HJÄLPFUNKTIONER
 // =============================================================================
 
-const fmt       = v => (v == null || isNaN(v)) ? "–" : v.toFixed(1).replace(".", ",");
+// Formatera tal med en decimal och komma som decimaltecken (svensk standard)
+const fmt = v => (v == null || isNaN(v)) ? "–" : v.toFixed(1).replace(".", ",");
+
+// Ta bort eventuell kommunkod i regionnamn (t.ex. "1480 Göteborg" → "Göteborg")
 const rensaNamn = n => n ? n.replace(/^\d{4} /, "") : "";
 
+// Slå upp en region i kommuner eller läns för ett givet mått
 const hamtaKommun = (mattData, namn) =>
   mattData.kommuner.find(k => k.namn === namn) ||
   (mattData.lan ? mattData.lan.find(k => k.namn === namn) : null);
 
+// Läs aktivt mått från segmentknapparna i kontrollbaren
+function aktivtMatt() {
+  const aktiv = document.querySelector(".segment-knapp.aktiv");
+  return aktiv ? aktiv.dataset.matt : "totalt";
+}
+
 
 // =============================================================================
 // 3. DATAINLÄSNING
+// Data injicerades av R som dolda JSON-taggar i HTML-sidan.
 // =============================================================================
 
-const data       = JSON.parse(document.getElementById("app-data").textContent);
-const prognosRaw = JSON.parse(document.getElementById("prognos-data").textContent);
+const data        = JSON.parse(document.getElementById("app-data").textContent);
+const prognosRaw  = JSON.parse(document.getElementById("prognos-data").textContent);
 
-const ar         = data.ar;
-const ar_labels  = ar.map(String);
-const sista_idx  = ar.length - 1;
-const senaste_ar = data.senaste_ar;
-const kommuner   = data.totalt.kommuner.map(k => k.namn);
-const lan        = data.totalt.lan ? data.totalt.lan.map(k => k.namn) : [];
+const ar          = data.ar;
+const ar_labels   = ar.map(String);
+const sista_idx   = ar.length - 1;          // Index för senaste historiska år
+const senaste_ar  = data.senaste_ar;
+const kommuner    = data.totalt.kommuner.map(k => k.namn);
+const lan         = data.totalt.lan ? data.totalt.lan.map(k => k.namn) : [];
 
-const kom_sort   = [...kommuner].sort((a,b) => a.localeCompare(b,"sv"));
-const lan_sort   = [...lan].sort((a,b) => a.localeCompare(b,"sv"));
+const kom_sort    = [...kommuner].sort((a,b) => a.localeCompare(b,"sv"));
+const lan_sort    = [...lan].sort((a,b) => a.localeCompare(b,"sv"));
 
-// Prognosdata – finns bara om hamta_prognos.R körts
-const harPrognos = prognosRaw !== null;
+const harPrognos  = prognosRaw !== null;
 
-// Prognosår att lägga till i x-axeln (de som inte redan finns i historiska ar)
-const prog_ar    = harPrognos ? prognosRaw.ar.filter(y => !ar.includes(y)) : [];
-const alla_ar    = [...ar, ...prog_ar];
+// Prognosår som inte redan finns i de historiska åren
+const prog_ar     = harPrognos ? prognosRaw.ar.filter(y => !ar.includes(y)) : [];
+const alla_ar     = [...ar, ...prog_ar];
 const alla_labels = alla_ar.map(String);
 
 
 // =============================================================================
-// 4. DROPDOWN MED SÖKFUNKTION
+// 4. KOMMUNVAL – div-baserad combobox
+// Varje kommunväljare består av ett sökfält och en div-lista med klickbara rader.
+// Valt kommunnamn lagras i valdKommun och läses av uppdateraDiagram().
 // =============================================================================
 
-function fyllDropdown(elId, defaultNamn, inkluderaTomt) {
-  const el = document.getElementById(elId);
-  el.innerHTML = "";
-  if (inkluderaTomt) {
-    const opt = document.createElement("option");
-    opt.value = ""; opt.textContent = "–";
-    el.appendChild(opt);
-  }
-  kom_sort.forEach(namn => {
-    const opt = document.createElement("option");
-    opt.value = opt.textContent = namn;
-    if (namn === defaultNamn) opt.selected = true;
-    el.appendChild(opt);
-  });
-  if (lan_sort.length > 0) {
-    const grupp = document.createElement("optgroup");
-    grupp.label = "── Län ──";
-    lan_sort.forEach(namn => {
-      const opt = document.createElement("option");
-      opt.value = opt.textContent = namn;
-      if (namn === defaultNamn) opt.selected = true;
-      grupp.appendChild(opt);
+let valdKommun = { k1: "", k2: "" };
+
+function skapaKommunval(sokId, listId, nyckel, defaultNamn, inkluderaTomt) {
+  const sokEl  = document.getElementById(sokId);
+  const listEl = document.getElementById(listId);
+
+  valdKommun[nyckel] = defaultNamn;
+  sokEl.value = defaultNamn || "";
+
+  // Bygg en klickbar rad i listan
+  function byggRad(namn) {
+    const div = document.createElement("div");
+    div.className = "kommunrad";
+    div.textContent = namn || "–";
+    div.addEventListener("mousedown", (e) => {
+      e.preventDefault(); // Förhindrar att blur triggas innan klicket registreras
+      valdKommun[nyckel] = namn;
+      sokEl.value = namn || "";
+      gomLista();
+      uppdateraDiagram();
     });
-    el.appendChild(grupp);
+    return div;
   }
-}
 
-function koppladSok(sokId, selectId) {
-  const sokEl         = document.getElementById(sokId);
-  const selectEl      = document.getElementById(selectId);
-  const inkluderaTomt = selectId === "select-k2";
+  // Fyll listan med kommuner och läns som matchar söktexten
+  function filteraLista(text) {
+    listEl.innerHTML = "";
+    const filter = text.toLowerCase().trim();
 
-  sokEl.addEventListener("input", () => {
-    const text         = sokEl.value.toLowerCase().trim();
-    const nuvarandeVal = selectEl.value;
-    selectEl.innerHTML = "";
     if (inkluderaTomt) {
-      const opt = document.createElement("option");
-      opt.value = ""; opt.textContent = "–";
-      selectEl.appendChild(opt);
+      listEl.appendChild(byggRad(""));
     }
-    [...kom_sort, ...lan_sort]
-      .filter(n => n.toLowerCase().includes(text))
-      .forEach(namn => {
-        const opt = document.createElement("option");
-        opt.value = opt.textContent = rensaNamn(namn);
-        if (namn === nuvarandeVal) opt.selected = true;
-        selectEl.appendChild(opt);
-      });
-  });
+
+    const matchande = filter
+      ? [...kom_sort, ...lan_sort].filter(n => n.toLowerCase().includes(filter))
+      : [...kom_sort, ...lan_sort];
+
+    const kommuner_m = matchande.filter(n => kom_sort.includes(n));
+    const lan_m      = matchande.filter(n => lan_sort.includes(n));
+
+    kommuner_m.forEach(n => listEl.appendChild(byggRad(n)));
+
+    if (lan_m.length > 0) {
+      const sep = document.createElement("div");
+      sep.className = "kommunrad-separator";
+      sep.textContent = "── Län ──";
+      listEl.appendChild(sep);
+      lan_m.forEach(n => listEl.appendChild(byggRad(n)));
+    }
+  }
+
+  function visaLista() {
+    filteraLista(sokEl.value);
+    listEl.style.display = "block";
+  }
+
+  function gomLista() {
+    listEl.style.display = "none";
+    sokEl.value = valdKommun[nyckel] || "";
+  }
+
+  sokEl.addEventListener("focus", () => { sokEl.value = ""; visaLista(); });
+  sokEl.addEventListener("input", () => { filteraLista(sokEl.value); listEl.style.display = "block"; });
+  sokEl.addEventListener("blur",  () => { setTimeout(gomLista, 200); });
 }
 
 const gbg = kommuner.find(k => k === "Göteborg") || kommuner[0];
-fyllDropdown("select-k1", gbg, false);
-fyllDropdown("select-k2", "",  true);
-koppladSok("search-k1", "select-k1");
-koppladSok("search-k2", "select-k2");
+skapaKommunval("search-k1", "list-k1", "k1", gbg, false);
+skapaKommunval("search-k2", "list-k2", "k2", "",  true);
 
 GR_SET            = kommuner.filter(k => GR_NAMN.some(gr => k === gr));
 const STORSTA_SET = kommuner.filter(k => STORSTA_10_NAMN.some(n => k === n));
 
-// Visa/dölj prognosinställning beroende på om data finns
 if (!harPrognos) {
   document.getElementById("prognos-option").style.display = "none";
-  document.getElementById("prognos-saknas").style.display = "block";
+  document.getElementById("prognos-saknas").style.display = "inline";
 }
 
 
@@ -449,7 +423,7 @@ if (!harPrognos) {
 
 let chart = null;
 
-// Dataset för historisk linje (heldragen)
+// Bygg ett Chart.js-dataset för en historisk linje
 function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
   return {
     label,
@@ -468,16 +442,15 @@ function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
   };
 }
 
-// Dataset för prognoslinje (streckad, börjar vid sista historiska punkten)
-// Skarven: sista historiska värdet upprepas som första prognospunkt
-// så linjen binds ihop visuellt utan gap.
+// Bygg ett dataset för en prognoslinje (streckad).
+// Börjar med null för historiska år, sedan skarven (sista historiska värdet)
+// för att linjen ska bindas ihop visuellt utan gap.
 function skapaPrognosDs(label, historiskVarden, prognosVarden, farg, order) {
   const skarv   = historiskVarden[historiskVarden.length - 1];
   const nullPad = new Array(historiskVarden.length - 1).fill(null);
-  const data    = [...nullPad, skarv, ...prognosVarden];
   return {
     label,
-    data,
+    data:             [...nullPad, skarv, ...prognosVarden],
     borderColor:      farg,
     backgroundColor:  farg,
     pointBackgroundColor: farg,
@@ -492,6 +465,7 @@ function skapaPrognosDs(label, historiskVarden, prognosVarden, farg, order) {
   };
 }
 
+// Beräkna min- och maxvärde per år för alla kommuner (historisk period)
 function beraknaMinMax(mattData) {
   const n    = ar.length;
   const minV = new Array(n).fill(Infinity);
@@ -510,7 +484,7 @@ function beraknaMinMax(mattData) {
   };
 }
 
-// Beräkna min/max per år för prognosperioden (alla kommuner)
+// Beräkna min- och maxvärde per år för alla kommuner (prognosperiod)
 function beraknaProgMinMax(matt) {
   if (!harPrognos) return { min: [], max: [] };
   const pData = prognosRaw[matt];
@@ -531,7 +505,7 @@ function beraknaProgMinMax(matt) {
   };
 }
 
-// Hämta prognosvärden för en namngiven region
+// Slå upp prognosvärden för en namngiven region
 function hamtaPrognosVarden(matt, namn) {
   if (!harPrognos) return null;
   const pData = prognosRaw[matt];
@@ -540,6 +514,7 @@ function hamtaPrognosVarden(matt, namn) {
   return hit ? hit.varden : null;
 }
 
+// Uppdatera legend-raden under diagrammet
 function uppdateraLegend(k1, k2, visSve, visMinMax, visPrognos) {
   const legendEl = document.getElementById("legend-rad");
   const poster   = [];
@@ -564,21 +539,22 @@ function uppdateraLegend(k1, k2, visSve, visMinMax, visPrognos) {
   ).join("");
 }
 
+// Huvudfunktion: bygg datasets och rendera diagrammet utifrån aktuella val
 function uppdateraDiagram() {
-  const matt       = document.querySelector("input[name='matt']:checked").value;
-  const k1         = document.getElementById("select-k1").value;
-  const k2         = document.getElementById("select-k2").value;
+  const matt       = aktivtMatt();
+  const k1         = valdKommun.k1 || "";
+  const k2         = valdKommun.k2 || "";
   const visSve     = document.getElementById("check-sverige").checked;
   const visMinMax  = document.getElementById("check-minmax").checked;
   const visPrognos = harPrognos && document.getElementById("check-prognos").checked;
   const mData      = data[matt];
   const dsets      = [];
 
-  // X-etiketter: utökade med prognosår om prognos visas
+  // Utökad x-axel när prognos visas
   const labels = visPrognos ? alla_labels : ar_labels;
 
-  // --- Grå bakgrundslinjer (alla kommuner) ---
-  // Vid prognos: förlängs med prognosvärden (heldragna, samma stil som historiska)
+  // Grå bakgrundslinjer för alla kommuner utom de valda.
+  // Vid prognos: förlängs med prognosvärden (heldragna).
   mData.kommuner.forEach(k => {
     if (k.namn === k1 || k.namn === k2) return;
     let varden = k.varden;
@@ -601,14 +577,12 @@ function uppdateraDiagram() {
     });
   });
 
-  // --- Min/max ---
-  // Vid prognos: historisk min/max följs av prognosens min/max (heldragen skarv)
+  // Min/max-linjer: historisk + prognos binds ihop utan null-gap
   if (visMinMax) {
     const { min, max } = beraknaMinMax(mData);
     let minData, maxData;
     if (visPrognos) {
       const { min: pMin, max: pMax } = beraknaProgMinMax(matt);
-      // Skarven: sista historiska värdet + prognosvärden (ingen null-gap)
       minData = [...min, ...pMin];
       maxData = [...max, ...pMax];
     } else {
@@ -619,13 +593,12 @@ function uppdateraDiagram() {
     dsets.push(skapaDs("Högsta kommun", maxData, FARG_GRA_MRK, 8, false, true));
   }
 
-  // --- Sverige historisk (gul) + prognos ---
+  // Sverige: historisk linje + streckad prognoslinje
   if (visSve && mData.sverige) {
     const svePad = visPrognos
       ? [...mData.sverige, ...new Array(prog_ar.length).fill(null)]
       : mData.sverige;
     dsets.push(skapaDs("Sverige", svePad, FARG_GUL, 3, true));
-
     if (visPrognos && prognosRaw[matt].sverige) {
       dsets.push(skapaPrognosDs(
         "Sverige (prognos)", mData.sverige, prognosRaw[matt].sverige, FARG_GUL_PROG, 3
@@ -633,9 +606,8 @@ function uppdateraDiagram() {
     }
   }
 
-  // --- Kommun 2 (rosa) + prognos ---
-  const k2aktiv = document.getElementById("check-k2-aktiv").checked;
-  if (k2 && k2aktiv) {
+  // Kommun 2 (rosa): historisk linje + streckad prognoslinje
+  if (k2) {
     const k = hamtaKommun(mData, k2);
     if (k) {
       const varden = visPrognos
@@ -651,9 +623,8 @@ function uppdateraDiagram() {
     }
   }
 
-  // --- Kommun 1 (blå) + prognos ---
-  const k1aktiv = document.getElementById("check-k1-aktiv").checked;
-  if (k1 && k1aktiv) {
+  // Kommun 1 (blå): historisk linje + streckad prognoslinje
+  if (k1) {
     const k = hamtaKommun(mData, k1);
     if (k) {
       const varden = visPrognos
@@ -669,7 +640,6 @@ function uppdateraDiagram() {
     }
   }
 
-  // --- Rendera ---
   if (chart) chart.destroy();
 
   chart = new Chart(
@@ -678,19 +648,17 @@ function uppdateraDiagram() {
       type: "line",
       data: { labels, datasets: dsets },
       plugins: [{
-        // Rita ljusblå bakgrundsrektangel för prognosåren
+        // Ritar en ljusblå bakgrundsrektangel över prognosåren och en
+        // tunn streckad linje vid övergångspunkten historik/prognos.
         id: "prognosBakgrund",
         beforeDraw(chartInst) {
           if (!visPrognos || !harPrognos) return;
-          const xScale = chartInst.scales.x;
-          const yScale = chartInst.scales.y;
-          const progStartLabel = String(prognosRaw.forsta_ar);
-          const startIdx = labels.indexOf(progStartLabel);
+          const xScale   = chartInst.scales.x;
+          const yScale   = chartInst.scales.y;
+          const startIdx = labels.indexOf(String(prognosRaw.forsta_ar));
           if (startIdx < 0) return;
 
-          // Beräkna x-position för prognosstart (vänsterkant av det första prognosåret)
-          // Chart.js placerar tick-centrum vid getPixelForValue(index)
-          // Vi vill ha kanten halvvägs mellan sista historiska och första prognos-tick
+          // x0 placeras halvvägs mellan sista historiska och första prognostick
           const x0 = startIdx > 0
             ? (xScale.getPixelForValue(startIdx - 1) + xScale.getPixelForValue(startIdx)) / 2
             : xScale.getPixelForValue(startIdx);
@@ -702,8 +670,6 @@ function uppdateraDiagram() {
           ctx2.save();
           ctx2.fillStyle = "rgba(220,235,248,0.35)";
           ctx2.fillRect(x0, y0, x1 - x0, y1 - y0);
-
-          // Tunn vertikal linje vid skarven
           ctx2.strokeStyle = "rgba(0,118,188,0.4)";
           ctx2.lineWidth   = 1.5;
           ctx2.setLineDash([4, 3]);
@@ -742,14 +708,13 @@ function uppdateraDiagram() {
           tooltip: {
             mode:      "index",
             intersect: false,
-            filter: (item, data) => {
-              // Visa aldrig grå bakgrundslinjer (order 20)
+            filter: (item) => {
+              // Dölj grå bakgrundslinjer (order 20) i tooltip
               if (item.dataset.order >= 10) return false;
-              // Dölj prognos-datasets för historiska år (dvs. år före forsta_ar)
+              // Dölj prognoslinjer för historiska år (visas bara från forsta_ar)
               if (visPrognos && harPrognos && item.dataset.borderDash &&
                   item.dataset.borderDash.length > 0) {
-                const yr = parseInt(labels[item.dataIndex]);
-                if (yr < prognosRaw.forsta_ar) return false;
+                if (parseInt(labels[item.dataIndex]) < prognosRaw.forsta_ar) return false;
               }
               return true;
             },
@@ -759,9 +724,9 @@ function uppdateraDiagram() {
             padding:    12,
             callbacks: {
               title: items => {
-                const yr     = parseInt(items[0].label);
-                const isProg = visPrognos && harPrognos && yr >= prognosRaw.forsta_ar;
-                return "År " + yr + (isProg ? " (prognos)" : "");
+                const yr = parseInt(items[0].label);
+                return "År " + yr + (visPrognos && harPrognos && yr >= prognosRaw.forsta_ar
+                  ? " (prognos)" : "");
               },
               label: item => "  " + item.dataset.label + ": " + fmt(item.raw)
             }
@@ -773,10 +738,8 @@ function uppdateraDiagram() {
               color:       "#555",
               font:        { size: 13 },
               maxRotation: 0,
-              callback: (v, i) => {
-                const yr = parseInt(labels[i]);
-                return yr % 5 === 0 ? String(yr) : "";
-              }
+              // Visa bara år delbara med 5 för att hålla x-axeln läsbar
+              callback: (v, i) => parseInt(labels[i]) % 5 === 0 ? labels[i] : ""
             },
             grid: { color: "#f0f0f0" }
           },
@@ -795,24 +758,33 @@ function uppdateraDiagram() {
     }
   );
 
-  // Källtext uppdateras beroende på om prognos visas
-  const kallaEl = document.getElementById("kalla-text");
-  kallaEl.textContent = visPrognos
+  // Uppdatera källtext beroende på om prognos visas
+  document.getElementById("kalla-text").textContent = visPrognos
     ? "Historiska data: SCB. Prognos: SCB befolkningsprognos 2024–2070. Bearbetat av stadsledningskontoret, Göteborgs Stad"
     : "Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad";
 
-  uppdateraLegend(
-    k1aktiv ? k1 : null,
-    k2aktiv ? k2 : null,
-    visSve, visMinMax, visPrognos
-  );
+  uppdateraLegend(k1 || null, k2 || null, visSve, visMinMax, visPrognos);
   uppdateraTabeller(matt);
 }
 
 
 // =============================================================================
 // 6. TABELLER
+// Aktiv tabellvy styrs av knappar och lagras i aktivTabell.
 // =============================================================================
+
+let aktivTabell = "toppbotten";
+
+function valjTabell(vald) {
+  aktivTabell = vald;
+  document.querySelectorAll(".tabell-knapp").forEach(btn => {
+    btn.classList.toggle("aktiv", btn.dataset.tabell === vald);
+  });
+  document.getElementById("toppbotten-wrapper").style.display = vald === "toppbotten" ? "flex"  : "none";
+  document.getElementById("gr-wrapper").style.display         = vald === "gr"         ? "block" : "none";
+  document.getElementById("storsta-wrapper").style.display    = vald === "storsta"    ? "block" : "none";
+  uppdateraTabeller(aktivtMatt());
+}
 
 function fyllTabell(id, rader) {
   document.querySelector("#" + id + " tbody").innerHTML =
@@ -822,19 +794,9 @@ function fyllTabell(id, rader) {
 }
 
 function uppdateraTabeller(matt) {
-  const mData      = data[matt];
-  const visTb      = document.getElementById("check-tabell").checked;
-  const visGR      = document.getElementById("check-gr").checked;
-  const visStorsta = document.getElementById("check-storsta").checked;
-  const tbWrapper  = document.getElementById("toppbotten-wrapper");
-  const grWrapper  = document.getElementById("gr-wrapper");
-  const stWrapper  = document.getElementById("storsta-wrapper");
-  const sektionen  = document.getElementById("tabell-sektion");
+  const mData = data[matt];
 
-  sektionen.style.display = (visTb || visGR || visStorsta) ? "block" : "none";
-
-  tbWrapper.style.display = visTb ? "flex" : "none";
-  if (visTb) {
+  if (aktivTabell === "toppbotten") {
     const lista = mData.kommuner
       .map(k => ({ namn: rensaNamn(k.namn), kvot: k.varden[sista_idx] }))
       .filter(k => k.kvot != null)
@@ -843,8 +805,7 @@ function uppdateraTabeller(matt) {
     fyllTabell("tabell-botten", lista.slice(-5).reverse());
   }
 
-  grWrapper.style.display = visGR ? "block" : "none";
-  if (visGR) {
+  if (aktivTabell === "gr") {
     const grData = GR_SET
       .map(kod => {
         const k = hamtaKommun(mData, kod);
@@ -855,8 +816,7 @@ function uppdateraTabeller(matt) {
     fyllTabell("tabell-gr", grData);
   }
 
-  stWrapper.style.display = visStorsta ? "block" : "none";
-  if (visStorsta) {
+  if (aktivTabell === "storsta") {
     const stData = STORSTA_SET
       .map(kod => {
         const k = hamtaKommun(mData, kod);
@@ -873,13 +833,16 @@ function uppdateraTabeller(matt) {
 // 7. EXPORTFUNKTIONER
 // =============================================================================
 
+// Kopierar diagrammet som PNG till urklipp, med legend inritad nedanför.
+// Faller tillbaka på nedladdning om urklipp-API saknas (äldre webbläsare).
 async function kopieraDiagram() {
   if (!chart) return;
   const srcCanvas = document.getElementById("huvuddiagram");
   const w = srcCanvas.width;
   const h = srcCanvas.height;
-  const synliga   = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
-  const legendH   = synliga.length > 0 ? 48 : 0;
+  const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
+  const legendH = synliga.length > 0 ? 48 : 0;
+
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width  = w;
   exportCanvas.height = h + legendH;
@@ -887,6 +850,7 @@ async function kopieraDiagram() {
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
   ctx.drawImage(srcCanvas, 0, 0);
+
   if (synliga.length > 0) {
     ctx.font = "bold 18px 'Open Sans', sans-serif";
     let x = 20;
@@ -905,6 +869,7 @@ async function kopieraDiagram() {
       x += ctx.measureText(ds.label).width + 28;
     });
   }
+
   exportCanvas.toBlob(async blob => {
     try {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
@@ -919,6 +884,7 @@ async function kopieraDiagram() {
   });
 }
 
+// Kopierar synliga linjer som tab-separerad text – klistras direkt in i Excel.
 function kopieraSiffror() {
   if (!chart) return;
   const synliga = chart.data.datasets.filter(ds => (ds.order || 20) < 10);
@@ -939,15 +905,15 @@ function kopieraSiffror() {
 
 
 // =============================================================================
-// 8. FÄLLBAR INFORUTA
+// 8. INFORUTA
 // =============================================================================
 
 function vaxlaTextbox() {
   const innehall = document.getElementById("textbox-innehall");
   const knapp    = document.getElementById("textbox-toggle");
-  const dold     = innehall.style.display === "none";
-  innehall.style.display = dold ? "block" : "none";
-  knapp.textContent      = dold ? "▲" : "▼";
+  const dold     = innehall.classList.contains("dold");
+  innehall.classList.toggle("dold", !dold);
+  knapp.textContent = dold ? "▲ Dölj" : "▼ Visa";
 }
 
 
@@ -955,26 +921,29 @@ function vaxlaTextbox() {
 // 9. HÄNDELSELYSSNARE
 // =============================================================================
 
-document.querySelectorAll("input[name='matt']")
-  .forEach(el => el.addEventListener("change", uppdateraDiagram));
-
-["select-k1", "select-k2"].forEach(id =>
-  document.getElementById(id).addEventListener("change", uppdateraDiagram));
-
-["check-k1-aktiv", "check-k2-aktiv"].forEach(id =>
-  document.getElementById(id).addEventListener("change", uppdateraDiagram));
-
-["check-sverige", "check-minmax", "check-tabell", "check-gr", "check-storsta", "check-prognos"]
-  .forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("change", uppdateraDiagram);
+document.querySelectorAll(".segment-knapp").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".segment-knapp").forEach(b => b.classList.remove("aktiv"));
+    btn.classList.add("aktiv");
+    uppdateraDiagram();
   });
+});
+
+["check-sverige", "check-minmax", "check-prognos"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("change", uppdateraDiagram);
+});
+
+document.querySelectorAll(".tabell-knapp").forEach(btn => {
+  btn.addEventListener("click", () => valjTabell(btn.dataset.tabell));
+});
 
 
 // =============================================================================
 // 10. INITIALISERA
 // =============================================================================
 
+// Ersätt "2025" med faktiskt senaste statistikår i alla rubriker och tabellhuvuden
 const arText = String(senaste_ar);
 ["rubrik-topp", "rubrik-botten", "rubrik-gr", "rubrik-storsta"].forEach(id => {
   const el = document.getElementById(id);
@@ -984,15 +953,18 @@ document.querySelectorAll("th").forEach(th => {
   if (th.textContent.includes("Kvot 2025"))
     th.textContent = th.textContent.replace("2025", arText);
 });
+const etikettEl = document.getElementById("tabell-ar-etikett");
+if (etikettEl) etikettEl.textContent = arText;
 
+valjTabell("toppbotten");
 uppdateraDiagram();
 
-// Mobilfix: orientationchange
+// Tvinga Chart.js att rita om vid orientationsbyte (iOS/Android)
 window.addEventListener("orientationchange", () => {
   setTimeout(() => { if (chart) chart.resize(); }, 150);
 });
 
-// Mobilfix: ResizeObserver
+// Trigga omritning direkt när wrappern ändrar storlek (säkrare än window resize)
 const diagramWrapper = document.querySelector(".diagram-wrapper");
 if (diagramWrapper && typeof ResizeObserver !== "undefined") {
   new ResizeObserver(() => { if (chart) chart.resize(); }).observe(diagramWrapper);

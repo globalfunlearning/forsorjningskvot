@@ -11,12 +11,12 @@ Interaktiv webbapplikation som visar demografisk försörjningskvot för alla Sv
 ## Funktioner
 
 - Välj mellan tre mått: totalt (0–19 + 65+), från äldre (65+) eller från yngre (0–19)
-- Jämför valfria kommuner eller län mot varandra
+- Jämför valfria kommuner eller län mot varandra via sökbara comboboxar
 - Visa Sverige, min/max-linjer och grå bakgrundslinjer för alla kommuner
-- **Prognos 2026–2050** (SCB): lägg till streckade prognoslinjer med ljusblå bakgrund för prognosåren
+- **Prognos 2026–2050** (SCB): streckade prognoslinjer med ljusblå bakgrund markerar prognosåren
 - Tabeller: topp/botten 5, Göteborgsregionens kommuner, 10 största kommunerna
-- Exportera diagram som PNG eller data som TSV (klistras in i Excel)
-- Responsiv layout – fungerar på mobil och desktop
+- Exportera diagram som PNG eller data som TSV (klistras in direkt i Excel)
+- Responsiv layout – fungerar på mobil, surfplatta och desktop
 
 ---
 
@@ -41,10 +41,10 @@ forsorjningskvot/
 ## Arbetsflöde
 
 ```r
-# 1. Hämta historiska data (behövs bara vid nytt statistikår)
+# 1. Hämta historiska data (en gång per år när ny statistik finns)
 source("hamta_data.R")        # → data/forsorjningskvot.json
 
-# 2. Hämta prognosdata (behövs vid ny SCB-prognos)
+# 2. Hämta prognosdata (vid ny SCB-prognos)
 source("hamta_prognos.R")     # → data/prognos.json
 ```
 
@@ -61,6 +61,9 @@ git add . && git commit -m "uppdatera data" && git push
 ## JSON-struktur
 
 ### `data/forsorjningskvot.json`
+
+Historiska försörjningskvoter för kommuner, läns och Sverige, 2000–senaste år.
+
 ```json
 {
   "senaste_ar": 2025,
@@ -76,11 +79,15 @@ git add . && git commit -m "uppdatera data" && git push
 ```
 
 ### `data/prognos.json`
+
+Beräknad försörjningskvot från SCB:s befolkningsprognos, 2026–2050.
+Sverige beräknas som summan av alla läns befolkning per åldersklass och år.
+
 ```json
 {
   "ar": [2026, 2027, ..., 2050],
   "forsta_ar": 2026,
-  "sista_ar": 2050,
+  "sista_ar":  2050,
   "totalt": {
     "kommuner": [{ "namn": "Göteborg", "varden": [59.1, ...] }],
     "lan":      [{ "namn": "Västra Götalands län", "varden": [...] }],
@@ -97,10 +104,10 @@ git add . && git commit -m "uppdatera data" && git push
 
 | Teknik | Motivering |
 |--------|-----------|
-| Chart.js | Enkelt, snabbt, professionellt utseende |
+| Chart.js 4.4 | Enkelt, snabbt, professionellt utseende |
 | Quarto | R bäddar in JSON i HTML vid rendering |
 | `embed-resources: true` | Allt i en HTML-fil – fungerar offline och på GitHub Pages |
-| pxweb (R) | Hämtar från SCB API |
+| pxweb (R) | Hämtar strukturerad data från SCB API |
 | GitHub Pages | Statisk publicering utan server |
 
 ---
@@ -120,15 +127,15 @@ git add . && git commit -m "uppdatera data" && git push
 
 | Tabell | Innehåll |
 |--------|---------|
-| `FkvotHVD` | Historisk försörjningskvot per kommun och län 2000– |
-| `BefProgRegFakN` | Befolkningsprognos per kommun, ettårsklasser, 2024–2070 |
+| `FkvotHVD` | Historisk försörjningskvot per kommun och läns, 2000– |
+| `BefProgRegFakN` | Befolkningsprognos per region, ettårsklasser, 2024–2070 |
 
 ---
 
 ## Att tänka på
 
 - `data/`-mappen är gitignorerad – JSON-filerna genereras lokalt och bäddas in vid `quarto render`
-- Knivsta har `null`-värden för 2000–2001 (kommunen tillkom 2002) – hanteras korrekt
+- Knivsta har `null`-värden för 2000–2001 (kommunen tillkom 2002) – hanteras korrekt i appen
 - `senaste_ar` i JSON uppdaterar automatiskt alla årsrubriker i tabellerna
-- Prognosdata (`prognos.json`) är valfritt – saknas filen visas en informationstext i sidebaren
-- SCB:s prognos sträcker sig till 2070 men appen visar bara 2026–2050
+- Prognosdata (`prognos.json`) är valfritt – saknas filen visas en informationstext i kontrollbaren
+- SCB:s prognos sträcker sig till 2070; appen visar bara 2026–2050
