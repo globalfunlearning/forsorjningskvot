@@ -422,6 +422,9 @@ if (!harPrognos) {
 // =============================================================================
 
 let chart = null;
+// Kommunnamn för min/max-linjer, indexerade per årsposition.
+// Sätts i uppdateraDiagram() och läses av tooltip label-callback.
+let minMaxNamn = { min: [], max: [] };
 
 // Bygg ett Chart.js-dataset för en historisk linje
 function skapaDs(label, varden, farg, order, tjock = false, streckad = false) {
@@ -467,20 +470,24 @@ function skapaPrognosDs(label, historiskVarden, prognosVarden, farg, order) {
 
 // Beräkna min- och maxvärde per år för alla kommuner (historisk period)
 function beraknaMinMax(mattData) {
-  const n    = ar.length;
-  const minV = new Array(n).fill(Infinity);
-  const maxV = new Array(n).fill(-Infinity);
+  const n      = ar.length;
+  const minV   = new Array(n).fill(Infinity);
+  const maxV   = new Array(n).fill(-Infinity);
+  const minNamn = new Array(n).fill("");
+  const maxNamn = new Array(n).fill("");
   mattData.kommuner.forEach(k => {
     k.varden.forEach((v, i) => {
       if (v != null) {
-        if (v < minV[i]) minV[i] = v;
-        if (v > maxV[i]) maxV[i] = v;
+        if (v < minV[i]) { minV[i] = v; minNamn[i] = rensaNamn(k.namn); }
+        if (v > maxV[i]) { maxV[i] = v; maxNamn[i] = rensaNamn(k.namn); }
       }
     });
   });
   return {
-    min: minV.map(v => v === Infinity  ? null : v),
-    max: maxV.map(v => v === -Infinity ? null : v)
+    min:      minV.map(v => v === Infinity  ? null : v),
+    max:      maxV.map(v => v === -Infinity ? null : v),
+    minNamn,
+    maxNamn
   };
 }
 
@@ -577,20 +584,29 @@ function uppdateraDiagram() {
     });
   });
 
-  // Min/max-linjer: historisk + prognos binds ihop utan null-gap
+  // Min/max-linjer: historisk + prognos binds ihop utan null-gap.
+  // minMaxNamn lagras så att tooltip-callback kan slå upp kommunnamn per år.
   if (visMinMax) {
-    const { min, max } = beraknaMinMax(mData);
+    const { min, max, minNamn, maxNamn } = beraknaMinMax(mData);
     let minData, maxData;
     if (visPrognos) {
       const { min: pMin, max: pMax } = beraknaProgMinMax(matt);
       minData = [...min, ...pMin];
       maxData = [...max, ...pMax];
+      // Fyll ut prognosår med tomma strängar (prognosnamnen beräknas inte)
+      minMaxNamn.min = [...minNamn, ...new Array(pMin.length).fill("")];
+      minMaxNamn.max = [...maxNamn, ...new Array(pMax.length).fill("")];
     } else {
       minData = min;
       maxData = max;
+      minMaxNamn.min = minNamn;
+      minMaxNamn.max = maxNamn;
     }
     dsets.push(skapaDs("Lägsta kommun", minData, FARG_GRA_MRK, 8, false, true));
     dsets.push(skapaDs("Högsta kommun", maxData, FARG_GRA_MRK, 8, false, true));
+  } else {
+    minMaxNamn.min = [];
+    minMaxNamn.max = [];
   }
 
   // Sverige: historisk linje + streckad prognoslinje
@@ -728,7 +744,17 @@ function uppdateraDiagram() {
                 return "År " + yr + (visPrognos && harPrognos && yr >= prognosRaw.forsta_ar
                   ? " (prognos)" : "");
               },
-              label: item => "  " + item.dataset.label + ": " + fmt(item.raw)
+              label: item => {
+                const i = item.dataIndex;
+                // Ersätt generisk etikett med kommunnamn för min/max-linjer
+                if (item.dataset.label === "Lägsta kommun" && minMaxNamn.min[i]) {
+                  return "  Lägst (" + minMaxNamn.min[i] + "): " + fmt(item.raw);
+                }
+                if (item.dataset.label === "Högsta kommun" && minMaxNamn.max[i]) {
+                  return "  Högst (" + minMaxNamn.max[i] + "): " + fmt(item.raw);
+                }
+                return "  " + item.dataset.label + ": " + fmt(item.raw);
+              }
             }
           }
         },
