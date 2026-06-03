@@ -4262,6 +4262,21 @@ font-style: italic;
 flex: 1;
 min-width: 0;
 }
+
+.prognos-notering {
+font-size: 11px;
+color: #888;
+font-style: italic;
+margin-top: 6px;
+padding: 0 20px;
+line-height: 1.6;
+max-width: 950px;
+}
+
+.prognos-markering {
+color: #c0392b;
+font-style: italic;
+}
 .export-knappar { display: flex; gap: 8px; flex-shrink: 0; }
 .export-knapp {
 padding: 7px 14px;
@@ -4572,6 +4587,16 @@ flex-wrap: wrap;
   </div>
 </div>
 
+<!-- Prognos-notering – visas bara när prognos är aktiverad (styrs av JS) -->
+<div id="prognos-notering" class="prognos-notering" style="display:none;">
+  Historiska data: SCB. <span class="prognos-markering">Prognos: SCB:s kommunprognoser från juni 2024 (2024–2070).</span>
+  Applikationen uppdateras med nya prognoser när de finns tillgängliga.
+  Kommuner och regioner beräknar egna prognoser som kan skilja sig mot SCB:s framskrivningar.
+  Göteborgs Stad publicerar årligen befolkningsprognoser som baseras på aktuell befolkningsstatistik,
+  uppdaterade antaganden om fruktsamhet, dödlighet, flyttningar och det framtida bostadsbyggandet.
+  Bearbetat av stadsledningskontoret, Göteborgs Stad.
+</div>
+
 <!-- Inforuta – kollapsad som standard, expanderas av användaren -->
 <div class="textbox" id="textbox">
   <div class="textbox-header" onclick="vaxlaTextbox()">
@@ -4691,9 +4716,15 @@ flex-wrap: wrap;
   </div>
   <div class="gbg-footer-nedre">
     <p class="gbg-footer-disclaimer">
-      Den här webbapplikationen är ett arbetsmaterial som tagits fram för internt bruk inom
-      stadsledningskontoret, Göteborgs Stad. Applikationen är publicerad via GitHub Pages och
+      Den här webbapplikationen är i första hand ett arbetsmaterial som tagits fram för internt bruk
+      inom stadsledningskontoret, Göteborgs Stad. Applikationen är publicerad via GitHub Pages och
       ingår inte i Göteborgs Stads officiella webbplats goteborg.se.
+      <br><br>
+      All statistik är officiell befolkningsstatistik från SCB. Befolkningsprognoserna är SCB:s
+      framskrivningar för Sveriges kommuner och enligt SCB:s information bygger beräkningarna på
+      vad som observerats under de senaste nio åren och ett antagande om att den utvecklingen
+      fortsätter. Ingen hänsyn tas till planerat bostadsbyggande, företagsetableringar eller andra
+      framtida mål och förutsättningar i kommunerna.
     </p>
   </div>
 </footer>
@@ -5069,7 +5100,7 @@ function uppdateraDiagram() {
       backgroundColor:  "transparent",
       pointRadius:      0,
       pointHoverRadius: 0,
-      borderWidth:      arMobil() ? 0.6 : 0.5,
+      borderWidth:      arMobil() ? 0.6 : 0.35,
       tension:          0,
       order:            20
     });
@@ -5277,10 +5308,17 @@ function uppdateraDiagram() {
     }
   );
 
-  // Uppdatera källtext beroende på om prognos visas
-  document.getElementById("kalla-text").textContent = visPrognos
-    ? "Historiska data: SCB. Prognos: SCB befolkningsprognos 2024–2070. Bearbetat av stadsledningskontoret, Göteborgs Stad"
-    : "Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad";
+  // Källtext och prognos-notering uppdateras beroende på om prognos visas
+  const kallaEl    = document.getElementById("kalla-text");
+  const noteringEl = document.getElementById("prognos-notering");
+  if (visPrognos) {
+    kallaEl.style.display    = "none";
+    noteringEl.style.display = "block";
+  } else {
+    kallaEl.style.display    = "block";
+    kallaEl.textContent      = "Källa: SCB, bearbetat av stadsledningskontoret, Göteborgs Stad";
+    noteringEl.style.display = "none";
+  }
 
   uppdateraLegend(k1 || null, k2 || null, visSve, visMinMax, visPrognos);
   uppdateraTabeller(matt);
