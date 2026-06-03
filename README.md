@@ -2,7 +2,7 @@
 
 Interaktiv webbapplikation som visar demografisk försörjningskvot för alla Sveriges kommuner och län 2000–2025, med möjlighet att lägga till SCB:s befolkningsprognos 2026–2050.
 
-**Länk:** https://globalfunlearning.github.io/forsorjningskvot/
+**Länk:** https://goteborg-statistik-och-analys.github.io/forsorjningskvot/
 
 ![Skärmdump av applikationen](skärmdump.png)
 
